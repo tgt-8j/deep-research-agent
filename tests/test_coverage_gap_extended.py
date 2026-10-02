@@ -573,6 +573,13 @@ class TestConfigResolveHelpers:
     @pytest.mark.asyncio
     async def test_default_values(self, monkeypatch):
         from src.config import AppConfig
+        # 清除所有可能污染默认值的 env vars
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.delenv("MODEL", raising=False)
+        monkeypatch.delenv("MAX_ITERATIONS", raising=False)
+        monkeypatch.delenv("MILVUS_HOST", raising=False)
+        monkeypatch.delenv("MILVUS_PORT", raising=False)
+        monkeypatch.delenv("ENABLE_MILVUS", raising=False)
         monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
         config = AppConfig.from_env()
         assert config.model == "qwen-plus"
@@ -609,6 +616,13 @@ class TestAppConfigFromFile:
     @pytest.mark.asyncio
     async def test_load_from_json(self, tmp_path, monkeypatch):
         from src.config import AppConfig
+        # 清除所有可能污染默认值的 env vars
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.delenv("MODEL", raising=False)
+        monkeypatch.delenv("MAX_ITERATIONS", raising=False)
+        monkeypatch.delenv("MILVUS_HOST", raising=False)
+        monkeypatch.delenv("MILVUS_PORT", raising=False)
+        monkeypatch.delenv("ENABLE_MILVUS", raising=False)
         monkeypatch.setenv("DASHSCOPE_API_KEY", "env-key")
         config_file = tmp_path / "config.json"
         config_file.write_text(json.dumps({
