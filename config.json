@@ -1,0 +1,20 @@
+{
+  "model": "qwen-plus",
+  "tenant_id": "default_tenant",
+  "user_id": "default_user",
+  "thread_id": "default",
+  "max_iterations": 3,
+  "enable_memory": true,
+  "short_term_ttl_seconds": 604800,
+  "short_term_max_messages": 30,
+  "short_term_summary_threshold": 20,
+  "short_term_backend": "memory",
+  "long_term_backend": "memory",
+  "long_term_scope": "user",
+  "save_conversation_task": false,
+  "checkpointer_backend": "auto",
+  "enable_milvus": false,
+  "memory_top_k": 6,
+  "milvus_port": 19530,
+  "milvus_collection": "mult_agent_memory"
+}

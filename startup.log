@@ -1,0 +1,18 @@
+INFO:     Started server process [23284]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:53510 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53560 - "POST /api/v1/research/stream HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:61749 - "POST /api/v1/research/stream HTTP/1.1" 200 OK
+2026-07-21 23:50:06,707 | INFO | Milvus 未启用，RAG 仅使用嵌入模型
+2026-07-21 23:50:06,723 | INFO | [memory] 使用内存 checkpointer
+2026-07-21 23:50:06,727 | INFO | [intent] 开始 | agent=intent_router
+2026-07-21 23:50:08,250 | INFO | [intent] 工具: 无
+2026-07-21 23:50:08,250 | INFO | [intent] LLM调用: 是 | 思考: 不可见
+2026-07-21 23:50:08,253 | INFO | [intent] 输出: {"route":"direct","reason":"用户问题‘介绍AI Agent’属于概念性、定义性问答，无需跨源检索或复杂分析，可由单次响应直接解答。"}
+2026-07-21 23:50:08,253 | INFO | [intent] 路由: direct
+2026-07-21 23:50:08,254 | INFO | [direct_answer] 开始 | agent=direct_responder
+2026-07-21 23:50:13,574 | INFO | [direct_answer] 输出: AI Agent（人工智能代理）是一种能自主感知环境、推理决策并执行任务的智能系统。它不单是响应指令的工具，而是具备目标导向性、记忆能力、规划能力和工具调用能力的“数字助手”。  核心特点包括：  - **自主性**：能根据目标主动规划步骤，而非仅等待指令；   - **感知与记忆**：通过输入（文本/图像/API等）理解上下文，并记住关键信息；   - **推理与规划**：利用大模型进行逻辑拆解（如“订机票→查航班→比价→支付”）；   - **工具调用**：可调用搜索、计算器、API、代码解释器等外部能力；   - **反馈闭环**：执行后评估结果，必要时修正策略（即“思考-行动-观察-反思”循环）。  常见类型：   \U0001f539 简单Agent（如AutoGen中的单角色助手）   \U0001f539 多Agent系统（如CrewAI中扮演不同角色协作完成复杂任务）   \U0001f539 具身Agent（未来延伸至机器人...
+INFO:     127.0.0.1:59639 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59639 - "GET /openapi.json HTTP/1.1" 200 OK

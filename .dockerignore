@@ -1,0 +1,16 @@
+node_modules/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+coverage/
+.pytest_cache/
