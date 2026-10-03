@@ -19,7 +19,8 @@ dependencies = [
   "redis",
   "python-dotenv",
   "pydantic-settings",
-  "typing-extensions"
+  "typing-extensions",
+  "prometheus-client>=0.20.0"
 ]
 
 [build-system]
