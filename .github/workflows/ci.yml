@@ -21,12 +21,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff pytest pytest-asyncio pytest-cov pytest-timeout
+          python -m pip install ruff==0.16.10 pytest pytest-asyncio pytest-cov pytest-timeout
           if exist pyproject.toml (python -m pip install -e ".[dev]" 2>$null)
+
+      - name: Verify ruff installation
+        run: python -m ruff --version
 
       - name: Lint with Ruff
         run: python -m ruff check src/ tests/ --output-format=concise
