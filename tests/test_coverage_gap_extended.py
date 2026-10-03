@@ -561,7 +561,13 @@ class TestTracingHelpers:
 class TestConfigResolveHelpers:
     def test_from_env_missing_key_raises(self, monkeypatch):
         from src.config import AppConfig
+        # 清除所有可能污染默认值的 env vars
         monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.delenv("MODEL", raising=False)
+        monkeypatch.delenv("MAX_ITERATIONS", raising=False)
+        monkeypatch.delenv("MILVUS_HOST", raising=False)
+        monkeypatch.delenv("MILVUS_PORT", raising=False)
+        monkeypatch.delenv("ENABLE_MILVUS", raising=False)
         with pytest.raises(ValueError, match="缺少 DASHSCOPE_API_KEY"):
             AppConfig.from_env()
         # 确保环境变量恢复（monkeypatch 自动处理，但显式确保）
@@ -590,6 +596,13 @@ class TestConfigResolveHelpers:
 
     def test_override_values(self, monkeypatch):
         from src.config import AppConfig
+        # 清除所有可能污染默认值的 env vars
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.delenv("MODEL", raising=False)
+        monkeypatch.delenv("MAX_ITERATIONS", raising=False)
+        monkeypatch.delenv("MILVUS_HOST", raising=False)
+        monkeypatch.delenv("MILVUS_PORT", raising=False)
+        monkeypatch.delenv("ENABLE_MILVUS", raising=False)
         monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
         monkeypatch.setenv("MODEL", "qwen-max")
         monkeypatch.setenv("MAX_ITERATIONS", "5")
@@ -599,6 +612,13 @@ class TestConfigResolveHelpers:
 
     def test_with_overrides(self, monkeypatch):
         from src.config import AppConfig
+        # 清除所有可能污染默认值的 env vars
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.delenv("MODEL", raising=False)
+        monkeypatch.delenv("MAX_ITERATIONS", raising=False)
+        monkeypatch.delenv("MILVUS_HOST", raising=False)
+        monkeypatch.delenv("MILVUS_PORT", raising=False)
+        monkeypatch.delenv("ENABLE_MILVUS", raising=False)
         monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
         config = AppConfig.from_env()
         new_config = config.with_overrides(model="qwen-turbo", max_iterations=1)
