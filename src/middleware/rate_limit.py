@@ -8,9 +8,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Callable
+from collections.abc import Callable
 
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import Request, Response
 
 logger = logging.getLogger("research.middleware.rate_limit")
 
@@ -110,7 +110,9 @@ async def rate_limit_middleware(request: Request, call_next: Callable) -> Respon
     allowed = await limiter.check(user_id)
 
     if not allowed:
-        logger.warning("Rate limit exceeded | user=%s | path=%s", user_id, request.url.path)
+        logger.warning(
+            "Rate limit exceeded | user=%s | path=%s", user_id, request.url.path
+        )
         return Response(
             content='{"error": {"code": "RATE_LIMITED", "message": "请求过于频繁，请稍后重试"}}',
             status_code=429,

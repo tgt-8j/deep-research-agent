@@ -1,20 +1,21 @@
 """工具模块：封装 Web 检索、本地 RAG 查询与通用辅助工具函数。"""
 
-from datetime import datetime
 import ast
 import json
 import logging
 import operator
 import os
-from pathlib import Path
 import re
 import urllib.error
 import urllib.request
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
 
 from langchain_core.tools import tool
-from typing import Optional
-from .rag.core import RAGSystem, RAGConfig
+
+from .rag.core import RAGConfig, RAGSystem
 
 logger = logging.getLogger("mult_agents")
 
@@ -46,9 +47,9 @@ def _safe_url(url: str) -> str:
     return url
 
 # RAG 系统实例（模块级，由 init_rag_system 初始化）
-_rag_system_instance: Optional[RAGSystem] = None
+_rag_system_instance: RAGSystem | None = None
 
-def init_rag_system(api_key: str, config: Optional[RAGConfig] = None):
+def init_rag_system(api_key: str, config: RAGConfig | None = None):
     """初始化全局 RAG 系统"""
     global _rag_system_instance
     if _rag_system_instance is None:

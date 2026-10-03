@@ -11,13 +11,13 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ..config import AppConfig
 from ..core.exceptions import register_exception_handlers
-from ..middleware.tracing import tracing_middleware
 from ..middleware.rate_limit import rate_limit_middleware
+from ..middleware.tracing import tracing_middleware
 from ..persistence import SessionStore, WorkflowCancellation
 from ..services.workflow import WorkflowService
 
@@ -63,7 +63,9 @@ class AppDependencies:
         }
 
 
-def create_app(config: AppConfig | None = None, service: WorkflowService | None = None) -> FastAPI:
+def create_app(
+    config: AppConfig | None = None, service: WorkflowService | None = None
+) -> FastAPI:
     """创建 FastAPI 应用实例，并注册生命周期钩子。
 
     Args:
@@ -89,8 +91,11 @@ def create_app(config: AppConfig | None = None, service: WorkflowService | None 
         # 启动阶段：预初始化所有依赖
         _ = app_deps.workflow_service
         _ = app_deps.session_store
-        logger.info("服务初始化完成 | model=%s | milvus=%s",
-                     config.model, "enabled" if config.enable_milvus else "disabled")
+        logger.info(
+            "服务初始化完成 | model=%s | milvus=%s",
+            config.model,
+            "enabled" if config.enable_milvus else "disabled",
+        )
         yield
         # 关闭阶段：清理资源
         logger.info("服务关闭中...")
@@ -107,6 +112,7 @@ def create_app(config: AppConfig | None = None, service: WorkflowService | None 
 
     # 注册中间件（测试环境跳过，避免 ASGI 中间件类问题）
     import os
+
     if os.getenv("TESTING") != "1":
         app.add_middleware(tracing_middleware)
         app.add_middleware(rate_limit_middleware)
@@ -123,6 +129,7 @@ def create_app(config: AppConfig | None = None, service: WorkflowService | None 
 
     # 注册 Metrics 端点（Prometheus）
     from ..metrics import create_metrics_endpoint
+
     app.add_api_route("/metrics", create_metrics_endpoint(), methods=["GET"])
 
     # 将依赖容器注入到 app.state
@@ -130,6 +137,7 @@ def create_app(config: AppConfig | None = None, service: WorkflowService | None 
 
     # 注册路由
     from .routers.research_router import router
+
     app.include_router(router)
 
     # 健康检查

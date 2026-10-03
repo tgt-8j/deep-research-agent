@@ -6,7 +6,6 @@ from fastapi.responses import StreamingResponse
 from ..schemas import ResearchRequest, ResearchResponse
 from ..service import WorkflowService, get_workflow_service
 
-
 router = APIRouter(prefix="/api/v1/research", tags=["research"])
 
 

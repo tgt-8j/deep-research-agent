@@ -6,11 +6,8 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import threading
-from typing import AsyncIterator, Callable
+from collections.abc import Callable
 
 from ..config import AppConfig
 from ..graph import build_graph
@@ -161,7 +158,9 @@ class WorkflowService:
             result = await self._graph.ainvoke(restored_state, config=config)
         except Exception:
             # Checkpoint 可能不在 checkpointer 中（进程重启后），降级为从头执行
-            logger.warning("Checkpoint 恢复失败，降级为从头执行 | thread_id=%s", thread_id)
+            logger.warning(
+                "Checkpoint 恢复失败，降级为从头执行 | thread_id=%s", thread_id
+            )
             config = {"configurable": {"thread_id": thread_id}}
             result = await self._graph.ainvoke(restored_state, config=config)
 
@@ -196,20 +195,24 @@ class WorkflowService:
             kind = event.get("event")
             if kind == "on_chain_start" and "name" in event:
                 node_name = event["name"]
-                emit({
-                    "type": "progress",
-                    "node": node_name,
-                    "message": f"{node_name} 节点开始执行",
-                    "status": "running",
-                })
+                emit(
+                    {
+                        "type": "progress",
+                        "node": node_name,
+                        "message": f"{node_name} 节点开始执行",
+                        "status": "running",
+                    }
+                )
             elif kind == "on_chain_end" and "name" in event:
                 node_name = event["name"]
-                emit({
-                    "type": "progress",
-                    "node": node_name,
-                    "message": f"{node_name} 节点执行完成",
-                    "status": "success",
-                })
+                emit(
+                    {
+                        "type": "progress",
+                        "node": node_name,
+                        "message": f"{node_name} 节点执行完成",
+                        "status": "success",
+                    }
+                )
                 # 从节点输出中收集 final 和 intent
                 output = event.get("data", {}).get("output", {})
                 if isinstance(output, dict):
@@ -220,10 +223,12 @@ class WorkflowService:
             elif kind == "on_chat_model_stream":
                 content = event.get("data", {}).get("chunk", {}).get("content", "")
                 if content:
-                    emit({
-                        "type": "delta",
-                        "content": str(content),
-                    })
+                    emit(
+                        {
+                            "type": "delta",
+                            "content": str(content),
+                        }
+                    )
             elif kind == "on_checkpoint":
                 # 记录 checkpoint 事件，用于恢复中断流程
                 pass
@@ -242,15 +247,21 @@ class WorkflowService:
                 final_result=final[:200],
             )
 
-        emit({
-            "type": "route",
-            "message": "已走直接回答路径" if intent == "direct" else "已走多智能体研究路径",
-        })
-        emit({
-            "type": "final",
-            "query": query,
-            "user_id": user_id,
-            "thread_id": thread_id,
-            "tenant_id": tenant_id,
-            "final": final,
-        })
+        emit(
+            {
+                "type": "route",
+                "message": "已走直接回答路径"
+                if intent == "direct"
+                else "已走多智能体研究路径",
+            }
+        )
+        emit(
+            {
+                "type": "final",
+                "query": query,
+                "user_id": user_id,
+                "thread_id": thread_id,
+                "tenant_id": tenant_id,
+                "final": final,
+            }
+        )

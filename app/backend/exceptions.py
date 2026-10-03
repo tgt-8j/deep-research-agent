@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
@@ -26,7 +27,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RuntimeError)
     async def runtime_error_handler(request: Request, exc: RuntimeError):
         trace_id = getattr(request.state, "trace_id", "unknown")
-        logger.error("[trace=%s] RuntimeError: %s", trace_id, exc, exc_info=True)
+        logger.error("[trace=%s] RuntimeError: %s", trace_id, exc)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={

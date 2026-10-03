@@ -32,7 +32,7 @@ class RAGConfig:
 
 
 class RAGSystem:
-    def __init__(self, api_key: str, config: Optional[RAGConfig] = None):
+    def __init__(self, api_key: str, config: RAGConfig | None = None):
         self.config = config or RAGConfig()
         self.api_key = api_key
         self.embeddings = DashScopeEmbeddings(
@@ -81,7 +81,7 @@ class RAGSystem:
             return "\n".join(lines)
         except Exception as exc:
             logger.error("检索失败: %s", exc)
-            return f"检索过程中发生错误: {str(exc)}"
+            return f"检索过程中发生错误: {exc!s}"
 
     def search_records(self, query: str, k: int = 5) -> list[dict]:
         if not utility.has_collection(self.config.collection_name):

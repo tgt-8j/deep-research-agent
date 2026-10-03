@@ -5,16 +5,12 @@
 
 from __future__ import annotations
 
-import pytest
-
 from src.retrieval.hybrid_search import (
+    _tokenize,
     bm25_search,
     hybrid_search,
     rrf_merge,
-    _tokenize,
-    _tokenize_chinese,
 )
-
 
 # ---------------------------------------------------------------------------
 # 分词
@@ -97,9 +93,21 @@ class TestRRFMerge:
 class TestHybridSearch:
     def test_hybrid_with_bm25_only(self):
         docs = [
-            {"doc_id": "d1", "content": "LangGraph agent framework tutorial", "title": "Doc 1"},
-            {"doc_id": "d2", "content": "Python basics for beginners", "title": "Doc 2"},
-            {"doc_id": "d3", "content": "LangGraph reflection loop deep dive", "title": "Doc 3"},
+            {
+                "doc_id": "d1",
+                "content": "LangGraph agent framework tutorial",
+                "title": "Doc 1",
+            },
+            {
+                "doc_id": "d2",
+                "content": "Python basics for beginners",
+                "title": "Doc 2",
+            },
+            {
+                "doc_id": "d3",
+                "content": "LangGraph reflection loop deep dive",
+                "title": "Doc 3",
+            },
         ]
         results = hybrid_search("LangGraph reflection", docs, k_bm25=2, k_vector=2)
         assert len(results) <= 2

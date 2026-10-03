@@ -15,10 +15,10 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from ...context import ResearchRuntimeContext
+from app.metrics import track_node
+
 from ...prompt.loader import load_prompt
 from ...state import ResearchState
-from app.metrics import track_node
 
 logger = logging.getLogger("research.nodes.intent")
 
@@ -32,8 +32,18 @@ def _rule_route(query: str) -> str:
     - 特定格式：包含年份+趋势/新闻等组合
     """
     force_multiagent_keywords = [
-        "调查", "调研", "来源", "证据", "检索统计", "来源清单",
-        "重大新闻", "热门项目", "趋势", "新闻", "最新", "盘点",
+        "调查",
+        "调研",
+        "来源",
+        "证据",
+        "检索统计",
+        "来源清单",
+        "重大新闻",
+        "热门项目",
+        "趋势",
+        "新闻",
+        "最新",
+        "盘点",
     ]
     normalized = query.strip()
     if re.search(r"20\d{2}年", normalized) and any(
@@ -44,10 +54,32 @@ def _rule_route(query: str) -> str:
         return "multiagent"
 
     keywords = [
-        "调研", "研究", "调查", "盘点", "热门", "趋势", "榜单",
-        "分析", "方案", "架构", "设计", "对比", "报告", "代码",
-        "实现", "落地", "检索", "知识库", "证据", "来源", "溯源",
-        "资料", "手册", "验证", "数据", "模型",
+        "调研",
+        "研究",
+        "调查",
+        "盘点",
+        "热门",
+        "趋势",
+        "榜单",
+        "分析",
+        "方案",
+        "架构",
+        "设计",
+        "对比",
+        "报告",
+        "代码",
+        "实现",
+        "落地",
+        "检索",
+        "知识库",
+        "证据",
+        "来源",
+        "溯源",
+        "资料",
+        "手册",
+        "验证",
+        "数据",
+        "模型",
     ]
     return "multiagent" if any(word in query for word in keywords) else "direct"
 
@@ -83,7 +115,7 @@ async def intent_node(
         f"{prompt_template}\n\n"
         f"用户问题：{query}\n"
         f"规则引擎初判：{rule_route}\n"
-        f"请输出 JSON：{{\"route\":\"direct|multiagent\",\"reason\":\"...\"}}"
+        f'请输出 JSON：{{"route":"direct|multiagent","reason":"..."}}'
     )
 
     human = HumanMessage(content=_with_memory_context(state, prompt))

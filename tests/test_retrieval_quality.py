@@ -252,7 +252,7 @@ class TestReranker:
     def test_fewer_than_fine_k(self, sample_evidence):
         """证据数少于精排数量。"""
         reranker = Reranker(use_embedding_rerank=False)
-        results, stats = reranker.rerank("LangGraph", sample_evidence[:2], fine_k=10)
+        results, _stats = reranker.rerank("LangGraph", sample_evidence[:2], fine_k=10)
         assert len(results) == 2
 
     def test_stats_structure(self, sample_evidence):
@@ -310,7 +310,7 @@ class TestRetrievalComparison:
         # 原始顺序
         original = sample_evidence.copy()
         # 重排序后
-        reranked, stats = reranker.rerank(query, original)
+        reranked, _stats = reranker.rerank(query, original)
 
         # 重排序应减少数量到 fine_k
         assert len(reranked) <= len(original)

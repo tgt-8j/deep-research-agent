@@ -11,7 +11,6 @@ from langchain_core.messages import HumanMessage
 from .state import ResearchState
 from .tools import bocha_web_search_records, search_knowledge_base_records
 
-
 logger = logging.getLogger("mult_agents")
 
 from .common import colorize
@@ -370,7 +369,6 @@ def _format_raw_records(records: list[dict], source_type: str) -> str:
         return "[]"
     lines = []
     for record in records[:40]:
-        locator = record.get("url") or record.get("doc_id") or ""
         lines.append(
             json.dumps(
                 {
@@ -523,7 +521,7 @@ def _fallback_local_evidence(records: list[dict]) -> dict:
 
 def _is_official_domain(domain: str) -> bool:
     value = domain.lower()
-    return value.endswith(".gov.cn") or value.endswith(".gov") or value.endswith(".edu") or value.endswith(".edu.cn") or "gov" in value or "official" in value
+    return value.endswith((".gov.cn", ".gov", ".edu", ".edu.cn")) or "gov" in value or "official" in value
 
 
 def _score_evidence(record: dict) -> tuple[float, str]:

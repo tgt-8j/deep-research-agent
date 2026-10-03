@@ -20,6 +20,7 @@ logger = logging.getLogger("research.retrieval.hybrid")
 
 try:
     from rank_bm25 import BM25Okapi
+
     _HAS_BM25 = True
 except ImportError:
     _HAS_BM25 = False
@@ -29,6 +30,7 @@ except ImportError:
 def _tokenize_chinese(text: str) -> list[str]:
     """中文分词：按字符切分 + 保留英文单词。"""
     import re
+
     # 英文单词和数字
     words = re.findall(r"[a-zA-Z0-9_]+", text)
     # 中文字符（单个字作为 token）
@@ -105,7 +107,9 @@ def bm25_search(
         return []
 
     # 构建 corpus（每个文档的分词结果）
-    corpus = [_tokenize(doc.get("content", "") or doc.get("snippet", "")) for doc in documents]
+    corpus = [
+        _tokenize(doc.get("content", "") or doc.get("snippet", "")) for doc in documents
+    ]
     query_tokens = _tokenize(query)
 
     if not query_tokens or not any(len(tokens) > 0 for tokens in corpus):
@@ -169,7 +173,7 @@ def hybrid_search(
     vector_results: list[dict] = []
     if embeddings is not None:
         try:
-            query_vector = embeddings(query)
+            embeddings(query)
             # 假设 embeddings 返回向量，需要调用 vectorstore.similarity_search_with_score
             # 这里简化处理，实际项目中需要传入 vectorstore
             logger.info("[hybrid_search] 向量检索暂不支持，仅使用 BM25")
@@ -194,4 +198,4 @@ def hybrid_search(
     return merged
 
 
-__all__ = ["hybrid_search", "rrf_merge", "bm25_search", "_tokenize"]
+__all__ = ["_tokenize", "bm25_search", "hybrid_search", "rrf_merge"]

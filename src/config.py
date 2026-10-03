@@ -46,13 +46,13 @@ class AppConfig:
     milvus_collection: str
     enable_milvus: bool
 
-    def with_overrides(self, **kwargs) -> "AppConfig":
+    def with_overrides(self, **kwargs) -> AppConfig:
         """返回覆盖指定字段的新配置实例。"""
         cleaned = {k: v for k, v in kwargs.items() if v is not None}
         return replace(self, **cleaned)
 
     @staticmethod
-    def from_file(path: str | Path | None = None) -> "AppConfig":
+    def from_file(path: str | Path | None = None) -> AppConfig:
         """从 config.json 文件加载配置。"""
         config_path = Path(path) if path else _PROJECT_ROOT / "config.json"
         if not config_path.exists():
@@ -72,11 +72,14 @@ class AppConfig:
             return int(resolve_str(field, env_key, str(default)))
 
         def resolve_bool(field: str, env_key: str, default: bool) -> bool:
-            return resolve_str(field, env_key, "true" if default else "false").lower() == "true"
+            return (
+                resolve_str(field, env_key, "true" if default else "false").lower()
+                == "true"
+            )
 
         api_key = resolve_str("api_key", "DASHSCOPE_API_KEY", "")
         if not api_key:
-            raise ValueError(f"缺少 DASHSCOPE_API_KEY 配置")
+            raise ValueError("缺少 DASHSCOPE_API_KEY 配置")
 
         return AppConfig(
             api_key=api_key,
@@ -88,12 +91,14 @@ class AppConfig:
             enable_memory=resolve_bool("enable_memory", "ENABLE_MEMORY", True),
             milvus_host=resolve_str("milvus_host", "MILVUS_HOST", "127.0.0.1"),
             milvus_port=resolve_int("milvus_port", "MILVUS_PORT", 19530),
-            milvus_collection=resolve_str("milvus_collection", "MILVUS_COLLECTION", "mult_agent_memory"),
+            milvus_collection=resolve_str(
+                "milvus_collection", "MILVUS_COLLECTION", "mult_agent_memory"
+            ),
             enable_milvus=resolve_bool("enable_milvus", "ENABLE_MILVUS", True),
         )
 
     @staticmethod
-    def from_env() -> "AppConfig":
+    def from_env() -> AppConfig:
         """从环境变量加载配置（简化版）。"""
         api_key = os.getenv("DASHSCOPE_API_KEY", "")
         if not api_key:

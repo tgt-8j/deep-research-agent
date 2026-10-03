@@ -1,9 +1,7 @@
 """tools.py 工具函数测试"""
 
-import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,23 +11,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 from mult_agents.tools import (
     _safe_path,
-    _workspace_root,
+    dedupe_lines,
+    extract_requirements,
+    local_docs_lookup_stub,
+    merge_notes,
+    outline_from_topics,
     simple_calculator,
     summarize_points,
-    dedupe_lines,
-    merge_notes,
-    extract_requirements,
-    outline_from_topics,
-    local_docs_lookup_stub,
 )
 
 
 def _call_tool(tool):
     """Helper to call a @tool-decorated function"""
-    return tool.func if hasattr(tool, 'func') else tool
+    return tool.func if hasattr(tool, "func") else tool
 
 
 # ── 安全路径 ──────────────────────────────────────────────
+
 
 class TestSafePath:
     def test_valid_relative_path(self, tmp_path):
@@ -49,6 +47,7 @@ class TestSafePath:
 
 
 # ── 文本处理工具 ───────────────────────────────────────────
+
 
 class TestTextTools:
     def test_summarize_points(self):
@@ -84,6 +83,7 @@ class TestTextTools:
 
 # ── 工具 stub ─────────────────────────────────────────────
 
+
 class TestStubTools:
     def test_local_docs_lookup_stub(self):
         result = _call_tool(local_docs_lookup_stub)("test query")
@@ -92,6 +92,7 @@ class TestStubTools:
 
 
 # ── 简单计算器 ─────────────────────────────────────────────
+
 
 class TestCalculator:
     def test_basic_addition(self):

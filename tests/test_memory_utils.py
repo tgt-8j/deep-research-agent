@@ -4,21 +4,19 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
+from langchain_core.messages import HumanMessage
+from mult_agents.memory.base import MemoryEntry, MemoryType
 from mult_agents.memory.utils import (
+    _simple_similarity,
+    calculate_memory_relevance,
+    compress_memories,
     create_memory_checkpoint,
     extract_memory_from_messages,
     format_memories_for_prompt,
     merge_user_profile,
-    calculate_memory_relevance,
-    compress_memories,
-    _simple_similarity,
 )
-from mult_agents.memory.base import MemoryEntry, MemoryType
-from langchain_core.messages import HumanMessage, AIMessage
 
 
 class TestCreateMemoryCheckpoint:
@@ -38,18 +36,24 @@ class TestCreateMemoryCheckpoint:
 class TestExtractMemoryFromMessages:
     def test_extract_facts(self):
         msgs = [HumanMessage(content="我叫小明，我住在北京。")]
-        result = extract_memory_from_messages(msgs, extract_facts=True, extract_preferences=False)
+        result = extract_memory_from_messages(
+            msgs, extract_facts=True, extract_preferences=False
+        )
         assert isinstance(result, dict)
         assert "facts" in result
 
     def test_extract_preferences(self):
         msgs = [HumanMessage(content="我喜欢Python，偏好简洁的代码风格。")]
-        result = extract_memory_from_messages(msgs, extract_facts=False, extract_preferences=True)
+        result = extract_memory_from_messages(
+            msgs, extract_facts=False, extract_preferences=True
+        )
         assert isinstance(result, dict)
         assert "preferences" in result
 
     def test_empty_messages(self):
-        result = extract_memory_from_messages([], extract_facts=True, extract_preferences=True)
+        result = extract_memory_from_messages(
+            [], extract_facts=True, extract_preferences=True
+        )
         assert result["facts"] == []
         assert result["preferences"] == []
 
@@ -192,7 +196,9 @@ class TestCompressMemories:
 
     def test_preserves_distinct_entries(self):
         entries = [
-            MemoryEntry(content=f"different content {i}", memory_type=MemoryType.SEMANTIC)
+            MemoryEntry(
+                content=f"different content {i}", memory_type=MemoryType.SEMANTIC
+            )
             for i in range(15)
         ]
         result = compress_memories(entries, target_count=5)

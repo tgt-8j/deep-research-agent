@@ -1,11 +1,15 @@
 import asyncio
-from threading import Lock
+from threading import Lock, Thread
 from typing import AsyncIterator, Callable
 
 try:
     from ...mult_agents.config import AppConfig
     from ...mult_agents.graph import build_app as build_workflow_app
-    from ...mult_agents.main import build_agents, build_checkpointer, build_memory_manager
+    from ...mult_agents.main import (
+        build_agents,
+        build_checkpointer,
+        build_memory_manager,
+    )
     from ...mult_agents.state import create_initial_state
 except ImportError:
     # 测试环境下的后备导入路径
@@ -254,7 +258,6 @@ class WorkflowService:
             asyncio.run_coroutine_threadsafe(queue.put(event), loop)
 
         # 在后台线程中执行，带总超时保护
-        exc_holder: list[Exception] = []
 
         def worker() -> None:
             try:

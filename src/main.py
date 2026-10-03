@@ -12,6 +12,7 @@ from pathlib import Path
 # Windows UTF-8 修复
 if sys.platform == "win32":
     import io
+
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
@@ -57,6 +58,7 @@ app = create_application()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "src.main:app",
         host="127.0.0.1",

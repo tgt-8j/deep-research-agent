@@ -40,8 +40,8 @@ class ConversationBuffer:
         self.max_messages = max_messages
         self.max_tokens = max_tokens
         self.summary_threshold = summary_threshold
-        self.messages: List[BaseMessage] = []
-        self.summary: Optional[str] = None
+        self.messages: list[BaseMessage] = []
+        self.summary: str | None = None
         self.token_count: int = 0
     
     def add_message(self, message: BaseMessage) -> None:
@@ -53,7 +53,7 @@ class ConversationBuffer:
         if len(self.messages) > self.max_messages:
             self._compress_messages()
     
-    def add_messages(self, messages: List[BaseMessage]) -> None:
+    def add_messages(self, messages: list[BaseMessage]) -> None:
         """批量添加消息"""
         for msg in messages:
             self.add_message(msg)
@@ -61,8 +61,8 @@ class ConversationBuffer:
     def get_messages(
         self,
         include_summary: bool = True,
-        last_n: Optional[int] = None
-    ) -> List[BaseMessage]:
+        last_n: int | None = None
+    ) -> list[BaseMessage]:
         """
         获取消息列表
         
@@ -147,8 +147,8 @@ class ShortTermMemory(BaseMemory):
         self.max_threads = max_threads
         
         # 存储结构: {thread_id: {"buffer": ConversationBuffer, "metadata": {}, "last_access": datetime}}
-        self._storage: Dict[str, Dict[str, Any]] = {}
-        self._checkpointer: Optional[BaseCheckpointSaver] = None
+        self._storage: dict[str, dict[str, Any]] = {}
+        self._checkpointer: BaseCheckpointSaver | None = None
     
     def set_checkpointer(self, checkpointer: BaseCheckpointSaver) -> None:
         """设置 LangGraph Checkpoint 存储"""
@@ -175,7 +175,7 @@ class ShortTermMemory(BaseMemory):
         self,
         thread_id: str,
         message: BaseMessage,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None
     ) -> None:
         """
         添加消息到短期记忆
@@ -197,8 +197,8 @@ class ShortTermMemory(BaseMemory):
         self,
         thread_id: str,
         include_summary: bool = True,
-        last_n: Optional[int] = None
-    ) -> List[BaseMessage]:
+        last_n: int | None = None
+    ) -> list[BaseMessage]:
         """
         获取指定线程的消息历史
         
@@ -217,7 +217,7 @@ class ShortTermMemory(BaseMemory):
         buffer = self._storage[thread_id]["buffer"]
         return buffer.get_messages(include_summary=include_summary, last_n=last_n)
     
-    def get_thread_metadata(self, thread_id: str) -> Dict[str, Any]:
+    def get_thread_metadata(self, thread_id: str) -> dict[str, Any]:
         """获取线程元数据"""
         if thread_id not in self._storage:
             return {}
@@ -226,10 +226,9 @@ class ShortTermMemory(BaseMemory):
     def update_thread_metadata(
         self,
         thread_id: str,
-        metadata: Dict[str, Any]
+        metadata: dict[str, Any]
     ) -> None:
         """更新线程元数据"""
-        buffer = self.get_or_create_buffer(thread_id)
         self._storage[thread_id]["metadata"].update(metadata)
     
     def clear_thread(self, thread_id: str) -> bool:
@@ -240,7 +239,7 @@ class ShortTermMemory(BaseMemory):
             return True
         return False
     
-    def list_active_threads(self) -> List[str]:
+    def list_active_threads(self) -> list[str]:
         """列出所有活跃线程"""
         self._cleanup_expired()
         return list(self._storage.keys())
@@ -273,7 +272,7 @@ class ShortTermMemory(BaseMemory):
         
         return entry.id
     
-    def get(self, memory_id: str) -> Optional[MemoryEntry]:
+    def get(self, memory_id: str) -> MemoryEntry | None:
         """获取指定 ID 的记忆（短期记忆不支持按 ID 获取）"""
         # 短期记忆不支持按 ID 获取，返回 None
         return None
@@ -281,11 +280,11 @@ class ShortTermMemory(BaseMemory):
     def search(
         self,
         query: str,
-        user_id: Optional[str] = None,
-        namespace: Optional[str] = None,
+        user_id: str | None = None,
+        namespace: str | None = None,
         limit: int = 5,
         **kwargs
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         """
         搜索短期记忆
         
@@ -313,8 +312,8 @@ class ShortTermMemory(BaseMemory):
     
     def clear(
         self,
-        user_id: Optional[str] = None,
-        namespace: Optional[str] = None
+        user_id: str | None = None,
+        namespace: str | None = None
     ) -> int:
         """清除短期记忆"""
         if namespace:
@@ -329,7 +328,7 @@ class ShortTermMemory(BaseMemory):
         logger.info(f"已清除所有短期记忆，共 {count} 个线程")
         return count
     
-    def list_namespaces(self, user_id: Optional[str] = None) -> List[str]:
+    def list_namespaces(self, user_id: str | None = None) -> list[str]:
         """列出所有线程 ID 作为命名空间"""
         return self.list_active_threads()
     
@@ -392,8 +391,8 @@ class RedisShortTermMemory(BaseMemory):
         self._client = None
         self._fallback = ShortTermMemory(ttl_seconds=ttl_seconds)
         self._connection_ok = False
-        self._last_error: Optional[str] = None
-        self._last_success: Optional[datetime] = None
+        self._last_error: str | None = None
+        self._last_success: datetime | None = None
         self._summary_llm = None  # 由 MemoryManager 注入
 
         self._connect(redis_url)
@@ -445,7 +444,7 @@ class RedisShortTermMemory(BaseMemory):
         return f"{self.SUMMARY_PREFIX}:{tenant}:{user}:{thread}"
 
     @staticmethod
-    def _serialize(message: BaseMessage) -> Dict[str, str]:
+    def _serialize(message: BaseMessage) -> dict[str, str]:
         role_map = {
             HumanMessage: "human",
             AIMessage: "ai",
@@ -455,7 +454,7 @@ class RedisShortTermMemory(BaseMemory):
         return {"role": role, "content": str(message.content)}
 
     @staticmethod
-    def _deserialize(payload: Dict[str, str]) -> BaseMessage:
+    def _deserialize(payload: dict[str, str]) -> BaseMessage:
         role = payload.get("role", "human")
         content = payload.get("content", "")
         if role == "ai":
@@ -491,7 +490,7 @@ class RedisShortTermMemory(BaseMemory):
         pipe.execute()
         logger.debug("Redis 短期记忆已压缩，当前消息数: %d", len(keep))
 
-    def _summarize(self, existing: str, history: List[Dict[str, str]]) -> str:
+    def _summarize(self, existing: str, history: list[dict[str, str]]) -> str:
         """生成摘要：优先使用 LLM，否则截断拼接"""
         lines = [f"{item.get('role', 'human')}: {item.get('content', '')}" for item in history]
         text = "\n".join(lines)
@@ -551,18 +550,18 @@ class RedisShortTermMemory(BaseMemory):
                 raise
         return self._fallback.save(entry)
 
-    def get(self, memory_id: str) -> Optional[MemoryEntry]:
+    def get(self, memory_id: str) -> MemoryEntry | None:
         """Redis 短期记忆不支持按 ID 查询，返回 None"""
         return None
 
     def search(
         self,
         query: str,
-        user_id: Optional[str] = None,
-        namespace: Optional[str] = None,
+        user_id: str | None = None,
+        namespace: str | None = None,
         limit: int = 5,
         **kwargs,
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         thread_id = namespace or "default"
         messages = self.get_messages(thread_id, include_summary=False)
         entries = []
@@ -581,12 +580,11 @@ class RedisShortTermMemory(BaseMemory):
 
     def clear(
         self,
-        user_id: Optional[str] = None,
-        namespace: Optional[str] = None,
+        user_id: str | None = None,
+        namespace: str | None = None,
     ) -> int:
         if not self._ensure_connected():
             return self._fallback.clear(user_id=user_id, namespace=namespace)
-        tenant = user_id or "default_tenant"
         if namespace:
             # 清除指定线程
             keys = self._client.keys(f"{self.KEY_PREFIX}:*:*:{namespace}") or []
@@ -610,7 +608,7 @@ class RedisShortTermMemory(BaseMemory):
             deleted += self._client.delete(*summary_keys)
         return deleted
 
-    def list_namespaces(self, user_id: Optional[str] = None) -> List[str]:
+    def list_namespaces(self, user_id: str | None = None) -> list[str]:
         if not self._ensure_connected():
             return self._fallback.list_active_threads()
         pattern = f"{self.KEY_PREFIX}:*:*:*"
@@ -626,7 +624,7 @@ class RedisShortTermMemory(BaseMemory):
         self,
         thread_id: str,
         message: BaseMessage,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         user_id: str = "default_user",
         tenant_id: str = "default_tenant",
     ) -> None:
@@ -645,10 +643,10 @@ class RedisShortTermMemory(BaseMemory):
         self,
         thread_id: str,
         include_summary: bool = True,
-        last_n: Optional[int] = None,
+        last_n: int | None = None,
         user_id: str = "default_user",
         tenant_id: str = "default_tenant",
-    ) -> List[BaseMessage]:
+    ) -> list[BaseMessage]:
         if not self._ensure_connected():
             return self._fallback.get_messages(thread_id, include_summary, last_n)
         key = self._thread_key(tenant_id, user_id, thread_id)

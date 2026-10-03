@@ -8,8 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Literal, TypedDict
-
+from typing import Literal, TypedDict
 
 # 检索来源偏好
 SourcePreference = Literal["web", "local", "hybrid"]
@@ -37,8 +36,7 @@ class WorkflowProgressEmitter(TypedDict, total=False):
         step: str,
         status: Literal["running", "success", "error"] = "running",
         **extra,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class ResearchRuntimeContext(TypedDict, total=False):

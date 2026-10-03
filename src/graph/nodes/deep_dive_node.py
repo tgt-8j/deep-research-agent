@@ -8,10 +8,11 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from ...prompt.loader import load_prompt
-from ...prompt.models import EvidencePool, EvidencePoolItem, AuditFlag, SourceIndexItem
-from ...state import ResearchState
 from app.metrics import track_node
+
+from ...prompt.loader import load_prompt
+from ...prompt.models import AuditFlag, EvidencePool, EvidencePoolItem
+from ...state import ResearchState
 
 logger = logging.getLogger("research.nodes.deep_dive")
 
@@ -26,7 +27,10 @@ def _score_evidence(record: dict) -> tuple[float, str]:
         return 0.45, "来源信息不完整"
     if any(word in domain for word in [".gov.cn", ".gov", ".edu", ".edu.cn"]):
         return 0.88, "官方或权威机构域名"
-    if any(word in domain for word in ["news", "finance", "reuters", "bloomberg", "people", "xinhuanet"]):
+    if any(
+        word in domain
+        for word in ["news", "finance", "reuters", "bloomberg", "people", "xinhuanet"]
+    ):
         return 0.72, "主流媒体域名"
     return 0.58, "普通互联网来源，需要交叉验证"
 
@@ -36,20 +40,22 @@ def _fallback_evidence(records: list[dict], source_type: str) -> list[dict]:
     evidence = []
     for record in records:
         score, reason = _score_evidence(record)
-        evidence.append({
-            "source_id": record.get("source_id", ""),
-            "source_type": source_type,
-            "title": record.get("title", ""),
-            "url": record.get("url", ""),
-            "doc_id": record.get("doc_id", ""),
-            "snippet": record.get("snippet", "")[:500],
-            "domain": record.get("domain", ""),
-            "supports_questions": record.get("supports_questions", []),
-            "reliability_score": score,
-            "reliability_reason": reason,
-            "source_label": record.get("title") or record.get("source_id", ""),
-            "notes": "",
-        })
+        evidence.append(
+            {
+                "source_id": record.get("source_id", ""),
+                "source_type": source_type,
+                "title": record.get("title", ""),
+                "url": record.get("url", ""),
+                "doc_id": record.get("doc_id", ""),
+                "snippet": record.get("snippet", "")[:500],
+                "domain": record.get("domain", ""),
+                "supports_questions": record.get("supports_questions", []),
+                "reliability_score": score,
+                "reliability_reason": reason,
+                "source_label": record.get("title") or record.get("source_id", ""),
+                "notes": "",
+            }
+        )
     return evidence
 
 
@@ -83,7 +89,12 @@ async def deep_dive_node(
 
     # 合并所有证据
     all_records = web_evidence + local_evidence
-    logger.info("[deep_dive] 待裁判证据总数=%d (web=%d, local=%d)", len(all_records), len(web_evidence), len(local_evidence))
+    logger.info(
+        "[deep_dive] 待裁判证据总数=%d (web=%d, local=%d)",
+        len(all_records),
+        len(web_evidence),
+        len(local_evidence),
+    )
 
     prompt_template = load_prompt("deep_dive")
     prompt = (
@@ -122,7 +133,11 @@ async def deep_dive_node(
         )
         evidence_pool = [e.model_dump() for e in evpool.evidence_pool]
         audit_flags = [f.model_dump() for f in evpool.audit_flags]
-        logger.info("[deep_dive] Pydantic 验证通过 | evidence=%d | flags=%d", len(evidence_pool), len(audit_flags))
+        logger.info(
+            "[deep_dive] Pydantic 验证通过 | evidence=%d | flags=%d",
+            len(evidence_pool),
+            len(audit_flags),
+        )
     except Exception as ve:
         logger.warning("[deep_dive] Pydantic 验证失败，使用原始数据 | %s", ve)
 
@@ -133,12 +148,14 @@ async def deep_dive_node(
         sid = ev.get("source_id", "")
         if sid and sid not in seen_ids:
             seen_ids.add(sid)
-            source_index.append({
-                "source_id": sid,
-                "label": ev.get("title") or ev.get("source_label", sid),
-                "locator": ev.get("url") or ev.get("doc_id", ""),
-                "source_type": ev.get("source_type", "source"),
-            })
+            source_index.append(
+                {
+                    "source_id": sid,
+                    "label": ev.get("title") or ev.get("source_label", sid),
+                    "locator": ev.get("url") or ev.get("doc_id", ""),
+                    "source_type": ev.get("source_type", "source"),
+                }
+            )
 
     if progress:
         progress("deep_dive", step="证据裁判完成", status="success")

@@ -7,9 +7,10 @@
 from __future__ import annotations
 
 import sys
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 _project_root = Path(__file__).resolve().parents[1]
 if str(_project_root) not in sys.path:
@@ -39,6 +40,7 @@ def mock_service():
 def mock_session_store(tmp_path):
     """Mock SessionStore（用真实实例，指向临时目录）。"""
     from src.persistence.session_store import SessionStore
+
     store = SessionStore(storage_root=str(tmp_path / "sessions"))
     return store
 
@@ -60,6 +62,7 @@ def mock_deps(mock_service, mock_session_store):
 def _build_test_client(deps):
     """构建带 mock 依赖的 TestClient（使用 ASGITransport）。"""
     import os
+
     os.environ["TESTING"] = "1"  # 跳过中间件注册，避免 ASGI 类问题
 
     from src.api.app import create_app
@@ -83,6 +86,7 @@ def _build_test_client(deps):
     app.state.deps = deps
 
     import httpx
+
     transport = httpx.ASGITransport(app=app)
     return httpx.AsyncClient(base_url="http://test", transport=transport)
 
@@ -106,6 +110,7 @@ class TestRunEndpoint:
             return response
 
         import asyncio
+
         response = asyncio.run(_run())
         assert response.status_code == 200
         data = response.json()
@@ -128,6 +133,7 @@ class TestRunEndpoint:
             return response
 
         import asyncio
+
         response = asyncio.run(_run())
         assert response.status_code == 422  # query 为空 → 422 Unprocessable Entity
 
@@ -143,6 +149,7 @@ class TestRunEndpoint:
             return response
 
         import asyncio
+
         response = asyncio.run(_run())
         assert response.status_code == 200
         data = response.json()
@@ -160,7 +167,6 @@ class TestStreamEndpoint:
 
     def test_stream_protocol_structure(self):
         """验证 SSE 事件协议结构正确（mock 级别）。"""
-        import json
         events = [
             {"type": "status", "message": "初始化"},
             {"type": "progress", "node": "intent", "status": "running"},
@@ -180,7 +186,7 @@ class TestStreamEndpoint:
     def test_stream_event_serialization(self):
         """验证 SSE 事件可以正确序列化和反序列化。"""
         import json
-        from datetime import datetime
+
         from src.api.routers.research_router import _emit
 
         event = {"type": "progress", "node": "triage", "message": "分诊中"}
@@ -198,11 +204,13 @@ class TestSessionEndpoints:
         client = _build_test_client(mock_deps)
 
         import asyncio
+
         response = asyncio.run(client.get("/api/v1/research/sessions/nonexistent"))
         assert response.status_code == 404
 
     def test_list_sessions(self, mock_deps, tmp_path):
         from src.persistence.session_store import SessionStore
+
         store = SessionStore(storage_root=str(tmp_path / "sessions"))
         store.create_session("s1", "问题1", "user_001", "tenant1")
         store.create_session("s2", "问题2", "user_001", "tenant1")
@@ -211,6 +219,7 @@ class TestSessionEndpoints:
         client = _build_test_client(mock_deps)
 
         import asyncio
+
         response = asyncio.run(client.get("/api/v1/research/sessions?user_id=user_001"))
         assert response.status_code == 200
         sessions = response.json()
@@ -218,15 +227,15 @@ class TestSessionEndpoints:
 
     def test_resume_no_checkpoint(self, mock_deps, tmp_path):
         from src.persistence.session_store import SessionStore
+
         store = SessionStore(storage_root=str(tmp_path / "sessions"))
         mock_deps.session_store = store
 
         client = _build_test_client(mock_deps)
 
         import asyncio
-        response = asyncio.run(
-            client.post("/api/v1/research/sessions/s1/resume")
-        )
+
+        response = asyncio.run(client.post("/api/v1/research/sessions/s1/resume"))
         assert response.status_code == 404
 
 
@@ -237,6 +246,7 @@ class TestHealthEndpoint:
         client = _build_test_client(mock_deps)
 
         import asyncio
+
         response = asyncio.run(client.get("/health"))
         assert response.status_code == 200
         data = response.json()
@@ -248,9 +258,10 @@ class TestTenantResolution:
     """租户解析逻辑测试。"""
 
     def test_resolve_from_payload(self, mock_deps):
+        from unittest.mock import MagicMock
+
         from src.api.routers.research_router import _resolve_tenant
         from src.api.schemas.research import ResearchRequest
-        from unittest.mock import MagicMock
 
         request = MagicMock()
         request.state.tenant_id = None
@@ -259,9 +270,10 @@ class TestTenantResolution:
         assert result == "tenant_from_request"
 
     def test_resolve_from_auth_tenant(self, mock_deps):
+        from unittest.mock import MagicMock
+
         from src.api.routers.research_router import _resolve_tenant
         from src.api.schemas.research import ResearchRequest
-        from unittest.mock import MagicMock
 
         request = MagicMock()
         request.state.tenant_id = "auth_tenant"
@@ -270,10 +282,12 @@ class TestTenantResolution:
         assert result == "auth_tenant"
 
     def test_tenant_mismatch_raises(self, mock_deps):
+        from unittest.mock import MagicMock
+
+        from fastapi import HTTPException
+
         from src.api.routers.research_router import _resolve_tenant
         from src.api.schemas.research import ResearchRequest
-        from fastapi import HTTPException
-        from unittest.mock import MagicMock
 
         request = MagicMock()
         request.state.tenant_id = "auth_tenant"

@@ -1,6 +1,5 @@
 """单元测试：plan_node 的辅助函数。"""
 
-import pytest
 import sys
 from pathlib import Path
 
@@ -8,7 +7,7 @@ _project_root = Path(__file__).resolve().parents[1]
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from src.graph.nodes.plan_node import _guess_primary_entity, _derive_search_queries
+from src.graph.nodes.plan_node import _derive_search_queries, _guess_primary_entity
 
 
 class TestGuessPrimaryEntity:

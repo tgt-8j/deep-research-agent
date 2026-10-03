@@ -186,7 +186,7 @@ class TestRerankEvidence:
     def test_with_custom_reranker(self, sample_evidence):
         """可传入自定义 Reranker 实例。"""
         custom_reranker = Reranker(use_embedding_rerank=False)
-        results, stats = rerank_evidence(
+        results, _stats = rerank_evidence(
             "LangGraph",
             sample_evidence,
             coarse_k=3,
@@ -213,7 +213,7 @@ class TestEdgeCases:
             }
         ]
         reranker = Reranker(use_embedding_rerank=False)
-        results, stats = reranker.rerank("query", evidence)
+        results, _stats = reranker.rerank("query", evidence)
         assert len(results) == 1
         assert results[0]["source_id"] == "X-001"
 

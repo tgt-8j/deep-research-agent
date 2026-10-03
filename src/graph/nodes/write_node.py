@@ -9,23 +9,26 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
+from app.metrics import track_node
+
 from ...prompt.loader import load_prompt
 from ...state import ResearchState
-from app.metrics import track_node
 
 logger = logging.getLogger("research.nodes.write")
 
 
 def _extract_citation_ids(content: str) -> list[str]:
     """从正文中提取所有引用ID [XXX]。"""
-    pattern = r'\[([A-Z]+\d+_\d+-\d+)\]'
+    pattern = r"\[([A-Z]+\d+_\d+-\d+)\]"
     matches = re.findall(pattern, content)
     return list(dict.fromkeys(matches))  # 去重保序
 
 
-def _validate_and_fix_citations(content: str, valid_source_ids: set[str]) -> tuple[str, list[str]]:
+def _validate_and_fix_citations(
+    content: str, valid_source_ids: set[str]
+) -> tuple[str, list[str]]:
     """校验正文中的引用ID，移除非法引用。"""
-    pattern = r'\[([A-Z]+\d+_\d+-\d+)\]'
+    pattern = r"\[([A-Z]+\d+_\d+-\d+)\]"
 
     def replace_citation(match):
         citation_id = match.group(1)
@@ -34,7 +37,9 @@ def _validate_and_fix_citations(content: str, valid_source_ids: set[str]) -> tup
         return ""  # 移除非法引用
 
     fixed_content = re.sub(pattern, replace_citation, content)
-    used_ids = [cid for cid in _extract_citation_ids(fixed_content) if cid in valid_source_ids]
+    used_ids = [
+        cid for cid in _extract_citation_ids(fixed_content) if cid in valid_source_ids
+    ]
     return fixed_content, used_ids
 
 
@@ -73,8 +78,12 @@ def _render_reference_list(state: ResearchState) -> str:
         source = lookup.get(sid)
         if not source:
             continue
-        locator = source.get("locator", "").strip() or ("链接暂不可用" if source["source_type"] == "web" else "本地知识库")
-        lines.append(f"- [{sid}] [{source['source_type']}]: {source['label']} | {locator}")
+        locator = source.get("locator", "").strip() or (
+            "链接暂不可用" if source["source_type"] == "web" else "本地知识库"
+        )
+        lines.append(
+            f"- [{sid}] [{source['source_type']}]: {source['label']} | {locator}"
+        )
 
     if len(lines) == 1:
         lines.append("- 暂无参考资料")
@@ -138,7 +147,9 @@ async def write_node(
     content = re.sub(r"```$", "", content.strip())
 
     # 校验并修正引用
-    content, used_citation_ids = _validate_and_fix_citations(content, valid_source_ids_set)
+    content, _used_citation_ids = _validate_and_fix_citations(
+        content, valid_source_ids_set
+    )
 
     # 附加参考资料
     reference_list = _render_reference_list(state)

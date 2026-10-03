@@ -12,7 +12,6 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("research.presentation")
 
@@ -20,12 +19,13 @@ logger = logging.getLogger("research.presentation")
 @dataclass
 class StreamMessage:
     """一条可渲染的消息。"""
+
     id: str
-    role: str          # "user" | "assistant" | "system"
+    role: str  # "user" | "assistant" | "system"
     content: str = ""
     reasoning: str = ""
     is_streaming: bool = False
-    tool_calls: List[dict] = field(default_factory=list)
+    tool_calls: list[dict] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -36,10 +36,10 @@ class StreamAggregator:
     """
 
     def __init__(self):
-        self.messages: List[StreamMessage] = []
+        self.messages: list[StreamMessage] = []
         self.is_streaming = False
-        self.error: Optional[dict] = None
-        self._active_assistant_id: Optional[str] = None
+        self.error: dict | None = None
+        self._active_assistant_id: str | None = None
 
     def add_user_message(self, content: str) -> StreamMessage:
         """添加用户消息（乐观更新）。"""
@@ -152,33 +152,41 @@ class NodeReporter:
         self._emit = emit_callback
 
     def started(self, message: str = "") -> None:
-        self._emit({
-            "type": "progress",
-            "node": self.node_key,
-            "message": message or f"{self.node_title}已开始执行",
-            "status": "running",
-        })
+        self._emit(
+            {
+                "type": "progress",
+                "node": self.node_key,
+                "message": message or f"{self.node_title}已开始执行",
+                "status": "running",
+            }
+        )
 
     def progress(self, message: str) -> None:
-        self._emit({
-            "type": "progress",
-            "node": self.node_key,
-            "message": message,
-            "status": "running",
-        })
+        self._emit(
+            {
+                "type": "progress",
+                "node": self.node_key,
+                "message": message,
+                "status": "running",
+            }
+        )
 
     def completed(self, message: str = "") -> None:
-        self._emit({
-            "type": "progress",
-            "node": self.node_key,
-            "message": message or f"{self.node_title}已完成",
-            "status": "success",
-        })
+        self._emit(
+            {
+                "type": "progress",
+                "node": self.node_key,
+                "message": message or f"{self.node_title}已完成",
+                "status": "success",
+            }
+        )
 
     def failed(self, message: str) -> None:
-        self._emit({
-            "type": "progress",
-            "node": self.node_key,
-            "message": message,
-            "status": "error",
-        })
+        self._emit(
+            {
+                "type": "progress",
+                "node": self.node_key,
+                "message": message,
+                "status": "error",
+            }
+        )

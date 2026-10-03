@@ -16,9 +16,9 @@ logger = logging.getLogger("mult_agents.memory")
 
 def create_memory_checkpoint(
     thread_id: str,
-    state: Dict[str, Any],
-    checkpoint_id: Optional[str] = None
-) -> Dict[str, Any]:
+    state: dict[str, Any],
+    checkpoint_id: str | None = None
+) -> dict[str, Any]:
     """
     创建记忆检查点
     
@@ -52,10 +52,10 @@ def create_memory_checkpoint(
 
 
 def extract_memory_from_messages(
-    messages: List[BaseMessage],
+    messages: list[BaseMessage],
     extract_facts: bool = True,
     extract_preferences: bool = True
-) -> Dict[str, List[str]]:
+) -> dict[str, list[str]]:
     """
     从消息中提取可记忆的信息
     
@@ -109,7 +109,7 @@ def extract_memory_from_messages(
     return memories
 
 
-def format_memories_for_prompt(memories: List[MemoryEntry], max_length: int = 2000) -> str:
+def format_memories_for_prompt(memories: list[MemoryEntry], max_length: int = 2000) -> str:
     """
     将记忆格式化为 Prompt 可用的文本
     
@@ -169,7 +169,7 @@ def format_memories_for_prompt(memories: List[MemoryEntry], max_length: int = 20
     return result
 
 
-def merge_user_profile(existing: Optional[Dict], new_data: Dict) -> Dict:
+def merge_user_profile(existing: dict | None, new_data: dict) -> dict:
     """
     合并用户画像数据
     
@@ -226,8 +226,8 @@ def calculate_memory_relevance(
     Returns:
         相关性分数 (0-1)
     """
-    from datetime import datetime
     import math
+    from datetime import datetime
     
     # 1. 基础文本相似度（简化版本）
     query_lower = query.lower()
@@ -258,9 +258,9 @@ def calculate_memory_relevance(
 
 
 def compress_memories(
-    memories: List[MemoryEntry],
+    memories: list[MemoryEntry],
     target_count: int = 10
-) -> List[MemoryEntry]:
+) -> list[MemoryEntry]:
     """
     压缩记忆列表，保留最相关的条目
     

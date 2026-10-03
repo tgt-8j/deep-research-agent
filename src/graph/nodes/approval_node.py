@@ -13,8 +13,9 @@ from typing import Any
 
 from langgraph.types import interrupt
 
-from ...state import ResearchState
 from app.metrics import track_node
+
+from ...state import ResearchState
 
 logger = logging.getLogger("research.nodes.approval")
 
@@ -40,7 +41,9 @@ async def approval_node(
     logger.info("[approval] 等待人工审批 | evidence_count=%d", evidence_count)
 
     if progress:
-        progress("approval", step=f"证据池 {evidence_count} 条，等待确认", status="running")
+        progress(
+            "approval", step=f"证据池 {evidence_count} 条，等待确认", status="running"
+        )
 
     # 使用 interrupt 暂停，等待人工输入
     # interrupt() 返回用户输入的值（由外部通过 command.resume() 提供）

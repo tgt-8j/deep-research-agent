@@ -75,7 +75,7 @@ class AppConfig:
             raise FileNotFoundError(f"配置文件不存在: {config_path}")
         data = json.loads(config_path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            raise ValueError("配置文件格式错误")
+            raise TypeError("配置文件格式错误")
         api_key = AppConfig._resolve_str(data, "api_key", "DASHSCOPE_API_KEY", "")
         if not api_key:
             raise ValueError(

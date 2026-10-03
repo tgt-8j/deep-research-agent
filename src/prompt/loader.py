@@ -6,9 +6,7 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Dict, Optional
 
 from .templates import PROMPTS as _IN_MEMORY_PROMPTS
 

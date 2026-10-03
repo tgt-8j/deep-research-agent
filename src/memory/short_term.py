@@ -84,7 +84,7 @@ class InMemoryShortTerm:
             return []
 
         # 清理过期消息
-        now = time.time()
+        time.time()
         self._storage[key] = [
             e for e in self._storage[key] if not self._is_expired(e["timestamp"])
         ]
@@ -113,7 +113,7 @@ class InMemoryShortTerm:
     def list_users(self) -> list[str]:
         """列出所有有记忆的用户。"""
         # 清理前缀 "st:"
-        return [k.replace(self._key(""), "") for k in self._storage.keys()]
+        return [k.replace(self._key(""), "") for k in self._storage]
 
 
 try:

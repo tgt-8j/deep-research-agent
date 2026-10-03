@@ -1,6 +1,7 @@
 """健康检查端点：/health（存活） + /health/ready（就绪）。"""
 import logging
 import time
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 

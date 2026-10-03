@@ -1,6 +1,5 @@
 """单元测试：State 定义和辅助函数。"""
 
-import pytest
 import sys
 from pathlib import Path
 
@@ -8,7 +7,7 @@ _project_root = Path(__file__).resolve().parents[1]
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from src.state import ResearchState, OutlineSection, EvidenceItem, Finding
+from src.state import EvidenceItem, Finding, OutlineSection, ResearchState
 
 
 class TestResearchState:
@@ -42,15 +41,27 @@ class TestResearchState:
             "iteration": 0,
             "max_iterations": 3,
             "objective": "LLM 框架对比分析",
-            "outline": [{"id": "sec_1", "title": "概述", "description": "介绍", "priority": 1}],
+            "outline": [
+                {"id": "sec_1", "title": "概述", "description": "介绍", "priority": 1}
+            ],
             "sub_questions": ["什么是LLM框架?", "各框架优缺点?"],
             "research_questions": ["LLM框架现状"],
-            "search_plan": [{"section_id": "sec_1", "query": "LLM框架", "source_preference": "hybrid"}],
+            "search_plan": [
+                {
+                    "section_id": "sec_1",
+                    "query": "LLM框架",
+                    "source_preference": "hybrid",
+                }
+            ],
             "budget": {"max_rounds": 2, "max_sources": 10},
             "web_search": "网页检索结果",
             "local_rag": "本地检索结果",
-            "web_evidence": [{"source_id": "WEB-1", "source_type": "web", "title": "test"}],
-            "local_evidence": [{"source_id": "LOC-1", "source_type": "local", "title": "test"}],
+            "web_evidence": [
+                {"source_id": "WEB-1", "source_type": "web", "title": "test"}
+            ],
+            "local_evidence": [
+                {"source_id": "LOC-1", "source_type": "local", "title": "test"}
+            ],
             "evidence_pool": [],
             "audit_flags": [],
             "source_index": [],
@@ -75,6 +86,7 @@ class TestResearchState:
     def test_state_type_check(self):
         """验证 State 是 TypedDict。"""
         from typing import get_type_hints
+
         hints = get_type_hints(ResearchState)
         assert "query" in hints
         assert "messages" in hints

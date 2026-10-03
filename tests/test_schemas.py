@@ -1,4 +1,5 @@
 """ResearchRequest 校验测试"""
+
 import sys
 from pathlib import Path
 
@@ -72,6 +73,7 @@ class TestResearchRequestValidation:
 class TestResearchResponse:
     def test_response_model(self):
         from backend.schemas.research import ResearchResponse
+
         resp = ResearchResponse(
             query="test",
             user_id="u1",

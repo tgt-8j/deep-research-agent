@@ -18,7 +18,11 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from .base import MemoryEntry, MemoryType
 from .long_term import EpisodicMemoryStore, ProceduralMemoryStore, SemanticMemoryStore
 from .short_term import ShortTermMemory
-from .utils import extract_memory_from_messages, format_memories_for_prompt, merge_user_profile
+from .utils import (
+    extract_memory_from_messages,
+    format_memories_for_prompt,
+    merge_user_profile,
+)
 
 try:
     import redis
@@ -46,20 +50,20 @@ class MemoryManager:
         short_term_ttl: int = 604800,
         short_term_max_messages: int = 30,
         short_term_summary_threshold: int = 20,
-        db_path: Optional[str] = None,
+        db_path: str | None = None,
         tenant_id: str = "default_tenant",
         short_term_backend: str = "postgres",
         long_term_backend: str = "postgres",
         long_term_scope: str = "user",
         save_conversation_task: bool = False,
         enable_milvus: bool = True,
-        redis_url: Optional[str] = None,
+        redis_url: str | None = None,
         redis_failover_enabled: bool = True,
-        postgres_dsn: Optional[str] = None,
-        milvus_host: Optional[str] = None,
+        postgres_dsn: str | None = None,
+        milvus_host: str | None = None,
         milvus_port: int = 19530,
         milvus_collection: str = "mult_agent_memory",
-        embedding_api_key: Optional[str] = None,
+        embedding_api_key: str | None = None,
         embedding_model: str = "text-embedding-v1",
         summary_model: str = "qwen-plus",
     ):
@@ -83,8 +87,8 @@ class MemoryManager:
         self._postgres_dsn = postgres_dsn
         self._milvus_store = None
         self._summary_llm = None
-        self._last_trace: Dict[str, Any] = {}
-        self._last_milvus_raw_hits: List[Dict[str, Any]] = []
+        self._last_trace: dict[str, Any] = {}
+        self._last_milvus_raw_hits: list[dict[str, Any]] = []
         if self.short_term_backend == "redis":
             from .short_term import RedisShortTermMemory
             self._redis_short_term = RedisShortTermMemory(
@@ -191,10 +195,10 @@ class MemoryManager:
 
     def _init_milvus(
         self,
-        milvus_host: Optional[str],
+        milvus_host: str | None,
         milvus_port: int,
         milvus_collection: str,
-        embedding_api_key: Optional[str],
+        embedding_api_key: str | None,
         embedding_model: str,
     ) -> None:
         if not milvus_host or not embedding_api_key:
@@ -214,7 +218,7 @@ class MemoryManager:
             logger.warning("Milvus 初始化失败，降级 PostgreSQL 检索: %s", exc)
             self._milvus_store = None
 
-    def _init_summary_llm(self, api_key: Optional[str], summary_model: str) -> None:
+    def _init_summary_llm(self, api_key: str | None, summary_model: str) -> None:
         if not api_key:
             return
         try:
@@ -223,7 +227,7 @@ class MemoryManager:
             logger.warning("摘要模型初始化失败，降级规则压缩: %s", exc)
             self._summary_llm = None
 
-    def _serialize_message(self, message: BaseMessage) -> Dict[str, str]:
+    def _serialize_message(self, message: BaseMessage) -> dict[str, str]:
         if isinstance(message, HumanMessage):
             role = "human"
         elif isinstance(message, AIMessage):
@@ -234,7 +238,7 @@ class MemoryManager:
             role = "human"
         return {"role": role, "content": str(message.content)}
 
-    def _deserialize_message(self, payload: Dict[str, str]) -> BaseMessage:
+    def _deserialize_message(self, payload: dict[str, str]) -> BaseMessage:
         role = payload.get("role", "human")
         content = payload.get("content", "")
         if role == "ai":
@@ -243,7 +247,7 @@ class MemoryManager:
             return SystemMessage(content=content)
         return HumanMessage(content=content)
 
-    def _summarize_text(self, existing_summary: str, history_slice: List[Dict[str, str]]) -> str:
+    def _summarize_text(self, existing_summary: str, history_slice: list[dict[str, str]]) -> str:
         lines = [f"{item.get('role', 'human')}: {item.get('content', '')}" for item in history_slice]
         history_text = "\n".join(lines)
         if self._summary_llm is None:
@@ -259,7 +263,7 @@ class MemoryManager:
         response = self._summary_llm.invoke([HumanMessage(content=prompt)])
         return str(response.content).strip()
 
-    def _save_pg_short_term_message(self, tenant_id: str, user_id: str, thread_id: str, payload: Dict[str, str]) -> None:
+    def _save_pg_short_term_message(self, tenant_id: str, user_id: str, thread_id: str, payload: dict[str, str]) -> None:
         if not self._postgres_dsn or psycopg is None:
             return
         with psycopg.connect(self._postgres_dsn) as conn:
@@ -281,7 +285,7 @@ class MemoryManager:
                 )
                 conn.commit()
 
-    def _get_pg_short_term_messages(self, tenant_id: str, user_id: str, thread_id: str) -> List[Dict[str, str]]:
+    def _get_pg_short_term_messages(self, tenant_id: str, user_id: str, thread_id: str) -> list[dict[str, str]]:
         if not self._postgres_dsn or psycopg is None:
             return []
         with psycopg.connect(self._postgres_dsn) as conn:
@@ -369,7 +373,7 @@ class MemoryManager:
                 conn.commit()
         self._set_pg_short_term_summary(tenant_id, user_id, thread_id, new_summary)
 
-    def _upsert_profile_pg(self, tenant_id: str, user_id: str, profile: Dict[str, Any]) -> None:
+    def _upsert_profile_pg(self, tenant_id: str, user_id: str, profile: dict[str, Any]) -> None:
         if not self._postgres_dsn or psycopg is None:
             return
         with psycopg.connect(self._postgres_dsn) as conn:
@@ -418,7 +422,7 @@ class MemoryManager:
                 )
                 conn.commit()
 
-    def _index_memory_milvus(self, text: str, metadata: Dict[str, Any]) -> None:
+    def _index_memory_milvus(self, text: str, metadata: dict[str, Any]) -> None:
         if not self._milvus_store or not text.strip():
             return
         try:
@@ -441,7 +445,7 @@ class MemoryManager:
         except Exception as exc:
             logger.warning("Milvus 写入失败: %s", exc)
 
-    def _annotate_entries_with_source(self, entries: List[MemoryEntry], source: str) -> List[MemoryEntry]:
+    def _annotate_entries_with_source(self, entries: list[MemoryEntry], source: str) -> list[MemoryEntry]:
         for entry in entries:
             entry.metadata["retrieval_source"] = source
         return entries
@@ -450,9 +454,9 @@ class MemoryManager:
         self,
         thread_id: str,
         message: BaseMessage,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         user_id: str = "default_user",
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> None:
         tenant = tenant_id or self.default_tenant_id
         metadata = metadata or {}
@@ -473,9 +477,9 @@ class MemoryManager:
     def add_short_term_messages(
         self,
         thread_id: str,
-        messages: List[BaseMessage],
+        messages: list[BaseMessage],
         user_id: str = "default_user",
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> None:
         for message in messages:
             self.add_short_term_message(
@@ -489,7 +493,7 @@ class MemoryManager:
         self,
         thread_id: str,
         user_id: str = "default_user",
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> str:
         tenant = tenant_id or self.default_tenant_id
         if self.short_term_backend == "redis" and self._redis_short_term is not None:
@@ -505,10 +509,10 @@ class MemoryManager:
         self,
         thread_id: str,
         include_summary: bool = True,
-        last_n: Optional[int] = None,
+        last_n: int | None = None,
         user_id: str = "default_user",
-        tenant_id: Optional[str] = None,
-    ) -> List[BaseMessage]:
+        tenant_id: str | None = None,
+    ) -> list[BaseMessage]:
         tenant = tenant_id or self.default_tenant_id
         if self.short_term_backend == "redis" and self._redis_short_term is not None:
             return self._redis_short_term.get_messages(
@@ -531,7 +535,7 @@ class MemoryManager:
         self,
         user_id: str,
         thread_id: str,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> bool:
         tenant = tenant_id or self.default_tenant_id
         if self.short_term_backend == "postgres" and self._postgres_dsn and psycopg:
@@ -567,11 +571,11 @@ class MemoryManager:
     def update_short_term_metadata(
         self,
         thread_id: str,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
     ) -> None:
         self.short_term.update_thread_metadata(thread_id, metadata)
 
-    def get_short_term_metadata(self, thread_id: str) -> Dict[str, Any]:
+    def get_short_term_metadata(self, thread_id: str) -> dict[str, Any]:
         return self.short_term.get_thread_metadata(thread_id)
 
     def clear_short_term(self, thread_id: str) -> bool:
@@ -585,7 +589,7 @@ class MemoryManager:
                     conn.commit()
         return self.short_term.clear_thread(thread_id)
 
-    def list_active_threads(self) -> List[str]:
+    def list_active_threads(self) -> list[str]:
         if self.short_term_backend == "redis" and self._redis_short_term is not None:
             return self._redis_short_term.list_namespaces()
         if self.short_term_backend == "postgres" and self._postgres_dsn and psycopg:
@@ -601,9 +605,9 @@ class MemoryManager:
     def save_user_profile(
         self,
         user_id: str,
-        profile: Dict[str, Any],
+        profile: dict[str, Any],
         merge: bool = True,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> str:
         if not self.enable_long_term:
             return str(uuid4())
@@ -640,7 +644,7 @@ class MemoryManager:
             )
         return memory_id
 
-    def get_user_profile(self, user_id: str, tenant_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_user_profile(self, user_id: str, tenant_id: str | None = None) -> dict[str, Any] | None:
         if not self.enable_long_term:
             return None
         tenant = tenant_id or self.default_tenant_id
@@ -660,9 +664,9 @@ class MemoryManager:
         self,
         user_id: str,
         fact: str,
-        category: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        thread_id: Optional[str] = None,
+        category: str | None = None,
+        tenant_id: str | None = None,
+        thread_id: str | None = None,
     ) -> str:
         if not self.enable_long_term:
             return str(uuid4())
@@ -699,11 +703,11 @@ class MemoryManager:
         tenant_id: str,
         user_id: str,
         query: str,
-        memory_type: Optional[str] = None,
-        namespace: Optional[str] = None,
-        thread_id: Optional[str] = None,
+        memory_type: str | None = None,
+        namespace: str | None = None,
+        thread_id: str | None = None,
         limit: int = 5,
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         if not self._milvus_store:
             return []
         try:
@@ -719,8 +723,8 @@ class MemoryManager:
         except Exception as exc:
             logger.warning("Milvus 检索失败，降级 PostgreSQL: %s", exc)
             return []
-        entries: List[MemoryEntry] = []
-        current_raw_hits: List[Dict[str, Any]] = []
+        entries: list[MemoryEntry] = []
+        current_raw_hits: list[dict[str, Any]] = []
         for doc in docs:
             metadata = doc.metadata or {}
             snippet = doc.page_content if len(doc.page_content) <= 160 else doc.page_content[:160] + "..."
@@ -782,7 +786,7 @@ class MemoryManager:
             }
             for item in accepted_hits[: min(3, len(accepted_hits))]
         ]
-        rejected_reason_count: Dict[str, int] = {}
+        rejected_reason_count: dict[str, int] = {}
         for item in rejected_hits:
             reason = item.get("rejected_by") or "unknown"
             rejected_reason_count[reason] = rejected_reason_count.get(reason, 0) + 1
@@ -801,10 +805,10 @@ class MemoryManager:
         user_id: str,
         query: str,
         memory_type: str,
-        namespace: Optional[str],
-        thread_id: Optional[str],
+        namespace: str | None,
+        thread_id: str | None,
         limit: int,
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         if not self._postgres_dsn or psycopg is None:
             return []
         sql = """
@@ -814,7 +818,7 @@ class MemoryManager:
               AND user_id = %s
               AND memory_type = %s
         """
-        params: List[Any] = [tenant_id, user_id, memory_type]
+        params: list[Any] = [tenant_id, user_id, memory_type]
         if query:
             pattern = f"%{query}%"
             sql += " AND (summary ILIKE %s OR content::text ILIKE %s)"
@@ -831,7 +835,7 @@ class MemoryManager:
             with conn.cursor() as cur:
                 cur.execute(sql, params)
                 rows = cur.fetchall()
-        entries: List[MemoryEntry] = []
+        entries: list[MemoryEntry] = []
         for row in rows:
             entries.append(
                 MemoryEntry(
@@ -850,11 +854,11 @@ class MemoryManager:
         self,
         user_id: str,
         query: str,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
         limit: int = 5,
-        tenant_id: Optional[str] = None,
-        thread_id: Optional[str] = None,
-    ) -> List[MemoryEntry]:
+        tenant_id: str | None = None,
+        thread_id: str | None = None,
+    ) -> list[MemoryEntry]:
         if not self.enable_long_term:
             logger.info(
                 "[memory] semantic search skipped | long_term=disabled | tenant=%s user=%s",
@@ -924,10 +928,10 @@ class MemoryManager:
         self,
         user_id: str,
         task_type: str,
-        task_data: Dict[str, Any],
-        outcome: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        thread_id: Optional[str] = None,
+        task_data: dict[str, Any],
+        outcome: str | None = None,
+        tenant_id: str | None = None,
+        thread_id: str | None = None,
     ) -> str:
         if not self.enable_long_term:
             return str(uuid4())
@@ -968,11 +972,11 @@ class MemoryManager:
     def get_task_history(
         self,
         user_id: str,
-        task_type: Optional[str] = None,
+        task_type: str | None = None,
         limit: int = 10,
-        tenant_id: Optional[str] = None,
-        thread_id: Optional[str] = None,
-    ) -> List[MemoryEntry]:
+        tenant_id: str | None = None,
+        thread_id: str | None = None,
+    ) -> list[MemoryEntry]:
         if not self.enable_long_term:
             return []
         tenant = tenant_id or self.default_tenant_id
@@ -996,9 +1000,9 @@ class MemoryManager:
         user_id: str,
         query: str,
         limit: int = 5,
-        tenant_id: Optional[str] = None,
-        thread_id: Optional[str] = None,
-    ) -> List[MemoryEntry]:
+        tenant_id: str | None = None,
+        thread_id: str | None = None,
+    ) -> list[MemoryEntry]:
         if not self.enable_long_term:
             logger.info(
                 "[memory] episodic search skipped | long_term=disabled | tenant=%s user=%s",
@@ -1065,11 +1069,11 @@ class MemoryManager:
         user_id: str,
         query: str,
         include_short_term: bool = False,
-        short_term_thread_id: Optional[str] = None,
+        short_term_thread_id: str | None = None,
         limit_per_type: int = 5,
-        tenant_id: Optional[str] = None,
-        long_term_thread_id: Optional[str] = None,
-    ) -> Dict[str, List[MemoryEntry]]:
+        tenant_id: str | None = None,
+        long_term_thread_id: str | None = None,
+    ) -> dict[str, list[MemoryEntry]]:
         tenant = tenant_id or self.default_tenant_id
         results = {
             "semantic": self.search_semantic(
@@ -1111,10 +1115,10 @@ class MemoryManager:
         self,
         user_id: str,
         thread_id: str,
-        query: Optional[str] = None,
+        query: str | None = None,
         max_memories: int = 10,
-        tenant_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
         tenant = tenant_id or self.default_tenant_id
         context = {}
         context["user_profile"] = (
@@ -1171,7 +1175,7 @@ class MemoryManager:
         user_id: str,
         thread_id: str,
         query: str,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         max_memories: int = 8,
     ) -> str:
         self._last_milvus_raw_hits = []
@@ -1187,7 +1191,7 @@ class MemoryManager:
         profile_text = json.dumps(context.get("user_profile", {}), ensure_ascii=False) if context.get("user_profile") else ""
         summary_text = context.get("conversation_summary", "")
         recent_messages = context.get("recent_messages", [])
-        recent_lines: List[str] = []
+        recent_lines: list[str] = []
         for msg in recent_messages[-8:]:
             role = "用户"
             msg_type = getattr(msg, "type", "")
@@ -1211,7 +1215,7 @@ class MemoryManager:
             sections.append(memory_text)
         injected = "\n\n".join(sections).strip()
         trace_items = []
-        source_count: Dict[str, int] = {}
+        source_count: dict[str, int] = {}
         for item in memory_entries:
             source = item.metadata.get("retrieval_source", "unknown")
             source_count[source] = source_count.get(source, 0) + 1
@@ -1265,7 +1269,7 @@ class MemoryManager:
         )
         return injected
 
-    def get_last_trace(self) -> Dict[str, Any]:
+    def get_last_trace(self) -> dict[str, Any]:
         return self._last_trace.copy()
 
     def persist_turn(
@@ -1303,9 +1307,7 @@ class MemoryManager:
             question_signals = ["?", "？", "什么", "吗", "how", "what", "why", "which"]
             if any(token in lowered for token in question_signals):
                 return False
-            if (normalized.startswith("你") and not allow_second_person) or normalized.startswith("请问"):
-                return False
-            return True
+            return not ((normalized.startswith("你") and not allow_second_person) or normalized.startswith("请问"))
 
         allow_second_person = any(token in lower_query for token in ["以后你", "你叫做", "你的偏好", "回答偏好", "你要"])
         facts = [item for item in extracted.get("facts", []) if is_valid_candidate(item, allow_second_person=allow_second_person)]
@@ -1364,9 +1366,9 @@ class MemoryManager:
     def clear_user_memory(
         self,
         user_id: str,
-        memory_types: Optional[List[str]] = None,
-        tenant_id: Optional[str] = None,
-    ) -> Dict[str, int]:
+        memory_types: list[str] | None = None,
+        tenant_id: str | None = None,
+    ) -> dict[str, int]:
         tenant = tenant_id or self.default_tenant_id
         if memory_types is None:
             memory_types = ["semantic", "episodic", "procedural", "short_term"]
@@ -1413,9 +1415,9 @@ class MemoryManager:
         self,
         user_id: str,
         name: str,
-        steps: List[str],
-        tags: Optional[List[str]] = None,
-        tenant_id: Optional[str] = None,
+        steps: list[str],
+        tags: list[str] | None = None,
+        tenant_id: str | None = None,
     ) -> str:
         """
         保存常用操作步骤到程序性记忆
@@ -1468,8 +1470,8 @@ class MemoryManager:
         user_id: str,
         query: str,
         limit: int = 3,
-        tenant_id: Optional[str] = None,
-    ) -> List[MemoryEntry]:
+        tenant_id: str | None = None,
+    ) -> list[MemoryEntry]:
         """
         搜索匹配的操作步骤
 
@@ -1524,7 +1526,7 @@ class MemoryManager:
         )
         return fallback_entries
 
-    def get_memory_stats(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_memory_stats(self, user_id: str | None = None) -> dict[str, Any]:
         active_threads = len(self.list_active_threads())
         stats = {
             "short_term": {

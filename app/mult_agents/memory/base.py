@@ -37,20 +37,20 @@ class MemoryEntry:
         access_count: 访问次数
         id: 唯一标识
     """
-    content: Union[str, Dict[str, Any]]
+    content: str | dict[str, Any]
     memory_type: MemoryType
-    user_id: Optional[str] = None
-    thread_id: Optional[str] = None
-    namespace: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    embedding: Optional[List[float]] = None
+    user_id: str | None = None
+    thread_id: str | None = None
+    namespace: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    embedding: list[float] | None = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None
     access_count: int = 0
     id: str = field(default_factory=lambda: str(uuid4()))
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
         return {
             "id": self.id,
@@ -68,7 +68,7 @@ class MemoryEntry:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MemoryEntry":
+    def from_dict(cls, data: dict[str, Any]) -> "MemoryEntry":
         """从字典创建"""
         return cls(
             id=data.get("id", str(uuid4())),
@@ -107,10 +107,9 @@ class BaseMemory(ABC):
         Returns:
             记忆条目 ID
         """
-        pass
     
     @abstractmethod
-    def get(self, memory_id: str) -> Optional[MemoryEntry]:
+    def get(self, memory_id: str) -> MemoryEntry | None:
         """
         获取指定 ID 的记忆
         
@@ -120,17 +119,16 @@ class BaseMemory(ABC):
         Returns:
             记忆条目，不存在则返回 None
         """
-        pass
     
     @abstractmethod
     def search(
         self,
         query: str,
-        user_id: Optional[str] = None,
-        namespace: Optional[str] = None,
+        user_id: str | None = None,
+        namespace: str | None = None,
         limit: int = 5,
         **kwargs
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         """
         搜索记忆
         
@@ -144,7 +142,6 @@ class BaseMemory(ABC):
         Returns:
             记忆条目列表
         """
-        pass
     
     @abstractmethod
     def delete(self, memory_id: str) -> bool:
@@ -157,13 +154,12 @@ class BaseMemory(ABC):
         Returns:
             是否删除成功
         """
-        pass
     
     @abstractmethod
     def clear(
         self,
-        user_id: Optional[str] = None,
-        namespace: Optional[str] = None
+        user_id: str | None = None,
+        namespace: str | None = None
     ) -> int:
         """
         清除记忆
@@ -175,10 +171,9 @@ class BaseMemory(ABC):
         Returns:
             清除的记忆数量
         """
-        pass
     
     @abstractmethod
-    def list_namespaces(self, user_id: Optional[str] = None) -> List[str]:
+    def list_namespaces(self, user_id: str | None = None) -> list[str]:
         """
         列出所有命名空间
         
@@ -188,4 +183,3 @@ class BaseMemory(ABC):
         Returns:
             命名空间列表
         """
-        pass

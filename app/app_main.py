@@ -2,17 +2,17 @@
 import logging
 from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
 
 from .backend.config import AppSettings
-from .backend.router import health_router, research_router, auth_router
+from .backend.exceptions import register_exception_handlers
 from .backend.middleware.auth import AuthMiddleware
 from .backend.middleware.trace import TraceMiddleware
-from .backend.exceptions import register_exception_handlers
-from .metrics import create_metrics_endpoint
+from .backend.router import auth_router, health_router, research_router
 from .logging_config import setup_logging
+from .metrics import create_metrics_endpoint
 
 
 def _create_app(settings: AppSettings) -> FastAPI:

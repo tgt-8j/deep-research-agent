@@ -14,6 +14,7 @@ if str(project_root) not in sys.path:
 
 # 先加载 .env，再导入其他模块（确保 Milvus 配置正确）
 from dotenv import load_dotenv
+
 env_path = project_root / ".env"
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)

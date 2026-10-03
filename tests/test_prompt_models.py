@@ -5,15 +5,15 @@ from __future__ import annotations
 import pytest
 
 from src.prompt.models import (
+    AnalysisOutput,
+    AuditFlag,
     EvidencePool,
     EvidencePoolItem,
-    AuditFlag,
-    SourceIndexItem,
     FindingItem,
-    AnalysisOutput,
-    ReflectionOutput,
     IntentOutput,
     QueryRewriteOutput,
+    ReflectionOutput,
+    SourceIndexItem,
 )
 
 
@@ -184,7 +184,9 @@ class TestEvidencePool:
                 AuditFlag(type="low_confidence", target="t1", reason="score < 0.5"),
             ],
             source_index=[
-                SourceIndexItem(source_id="WEB-1", label="Test", locator="https://test.com"),
+                SourceIndexItem(
+                    source_id="WEB-1", label="Test", locator="https://test.com"
+                ),
             ],
         )
         assert len(pool.evidence_pool) == 1
@@ -213,6 +215,7 @@ class TestEvidencePool:
     def test_validate_json_string(self):
         """从 JSON 字符串验证。"""
         import json
+
         data = {
             "summary": "test",
             "evidence_pool": [{"source_id": "W-1", "source_type": "web", "title": "T"}],
@@ -293,7 +296,12 @@ class TestReflectionOutput:
         output = ReflectionOutput(
             reflection_summary="发现信息缺口",
             supplementary_queries=[
-                {"section_id": "gap_1", "query": "LangGraph 性能优化", "source_preference": "hybrid", "reason": "补搜性能数据"},
+                {
+                    "section_id": "gap_1",
+                    "query": "LangGraph 性能优化",
+                    "source_preference": "hybrid",
+                    "reason": "补搜性能数据",
+                },
             ],
         )
         assert len(output.supplementary_queries) == 1
@@ -327,7 +335,11 @@ class TestQueryRewriteOutput:
     def test_valid_output(self):
         """有效改写输出。"""
         output = QueryRewriteOutput(
-            rewritten_queries=["LangGraph 是什么", "LangGraph 使用教程", "LangGraph 示例"],
+            rewritten_queries=[
+                "LangGraph 是什么",
+                "LangGraph 使用教程",
+                "LangGraph 示例",
+            ],
         )
         assert len(output.rewritten_queries) == 3
 
@@ -343,7 +355,8 @@ class TestPydanticValidationIntegration:
     def test_deep_dive_validation(self):
         """模拟 deep_dive_node 的验证流程。"""
         import json
-        from src.prompt.models import EvidencePool, EvidencePoolItem, AuditFlag
+
+        from src.prompt.models import EvidencePool
 
         llm_output = {
             "summary": "证据裁判完成",
@@ -371,14 +384,20 @@ class TestPydanticValidationIntegration:
     def test_analyze_validation(self):
         """模拟 analyze_node 的验证流程。"""
         import json
-        from src.prompt.models import AnalysisOutput, FindingItem
+
+        from src.prompt.models import AnalysisOutput
 
         llm_output = {
             "analysis_summary": "分析完成",
             "needs_more_research": False,
             "missing_gaps": [],
             "findings": [
-                {"claim_id": "c_1", "claim": "结论", "confidence": "high", "source_ids": ["W-1"]}
+                {
+                    "claim_id": "c_1",
+                    "claim": "结论",
+                    "confidence": "high",
+                    "source_ids": ["W-1"],
+                }
             ],
             "claim_map": [{"claim_id": "c_1", "source_ids": ["W-1"]}],
             "next_actions": [],

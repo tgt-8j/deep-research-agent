@@ -10,13 +10,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import sys
-import re
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -41,7 +39,9 @@ def _make_mock_llm(responses: list[str] | None = None) -> MagicMock:
     ]
 
     async def mock_ainvoke(messages):
-        content = response_sequence.pop(0) if response_sequence else response_sequence[-1]
+        content = (
+            response_sequence.pop(0) if response_sequence else response_sequence[-1]
+        )
         return {"messages": [MagicMock(content=content, type="ai")]}
 
     llm.ainvoke = mock_ainvoke
@@ -162,26 +162,32 @@ class TestRuleBasedIntent:
 
     def test_simple_greeting(self):
         from src.graph.nodes.intent_node import _rule_route
+
         assert _rule_route("你好") == "direct"
 
     def test_weather_query(self):
         from src.graph.nodes.intent_node import _rule_route
+
         assert _rule_route("今天天气怎么样") == "direct"
 
     def test_research_keyword(self):
         from src.graph.nodes.intent_node import _rule_route
+
         assert _rule_route("帮我调研一下LangGraph框架") == "multiagent"
 
     def test_trend_with_year(self):
         from src.graph.nodes.intent_node import _rule_route
+
         assert _rule_route("2026年AI Agent市场趋势") == "multiagent"
 
     def test_comparison_query(self):
         from src.graph.nodes.intent_node import _rule_route
+
         assert _rule_route("对比RAG和Fine-tuning的优缺点") == "multiagent"
 
     def test_empty_query(self):
         from src.graph.nodes.intent_node import _rule_route
+
         assert _rule_route("") == "direct"
 
 
@@ -260,7 +266,7 @@ class TestEvidenceScoring:
         from src.graph.nodes.deep_dive_node import _score_evidence
 
         record = {"source_type": "local"}
-        score, reason = _score_evidence(record)
+        score, _reason = _score_evidence(record)
         assert score == 0.92
 
     def test_official_domain_score(self):
@@ -268,7 +274,7 @@ class TestEvidenceScoring:
         from src.graph.nodes.deep_dive_node import _score_evidence
 
         record = {"source_type": "web", "domain": "www.example.gov.cn"}
-        score, reason = _score_evidence(record)
+        score, _reason = _score_evidence(record)
         assert score == 0.88
 
         record2 = {"source_type": "web", "domain": "www.university.edu.cn"}
@@ -280,7 +286,7 @@ class TestEvidenceScoring:
         from src.graph.nodes.deep_dive_node import _score_evidence
 
         record = {"source_type": "web", "domain": "news.example.com"}
-        score, reason = _score_evidence(record)
+        score, _reason = _score_evidence(record)
         assert score == 0.72
 
     def test_normal_domain_score(self):
@@ -288,7 +294,7 @@ class TestEvidenceScoring:
         from src.graph.nodes.deep_dive_node import _score_evidence
 
         record = {"source_type": "web", "domain": "blog.example.com"}
-        score, reason = _score_evidence(record)
+        score, _reason = _score_evidence(record)
         assert score == 0.58
 
     def test_missing_domain_score(self):
@@ -296,7 +302,7 @@ class TestEvidenceScoring:
         from src.graph.nodes.deep_dive_node import _score_evidence
 
         record = {"source_type": "web"}
-        score, reason = _score_evidence(record)
+        score, _reason = _score_evidence(record)
         assert score == 0.45
 
 
@@ -407,8 +413,8 @@ class TestWorkflowService:
     @pytest.mark.asyncio
     async def test_build_state_contains_query(self):
         """验证 _build_state 正确初始化状态。"""
-        from src.services.workflow import WorkflowService
         from src.config import AppConfig
+        from src.services.workflow import WorkflowService
 
         # 使用默认配置值创建 config 对象
         config = AppConfig(
@@ -442,8 +448,8 @@ class TestWorkflowService:
 
     def test_build_state_uses_config_max_iterations(self):
         """验证 max_iterations 从配置中读取。"""
-        from src.services.workflow import WorkflowService
         from src.config import AppConfig
+        from src.services.workflow import WorkflowService
 
         config = AppConfig(
             api_key="test-key",
@@ -574,7 +580,7 @@ class TestToolFunctions:
         """验证 JSON 块提取函数。"""
         from app.mult_agents.nodes import _extract_json_block
 
-        text = "Here is the result:\n```json\n{\"key\": \"value\"}\n```"
+        text = 'Here is the result:\n```json\n{"key": "value"}\n```'
         result = _extract_json_block(text)
         parsed = json.loads(result)
         assert parsed["key"] == "value"

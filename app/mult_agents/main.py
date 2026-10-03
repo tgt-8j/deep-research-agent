@@ -1,8 +1,8 @@
 """运行主入口：构建 Agent、初始化记忆与 checkpointer，并驱动工作流执行。"""
 import argparse
+import importlib
 import io
 import json
-import importlib
 import logging
 import os
 import sys
@@ -15,10 +15,10 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
+from langchain.agents import create_agent
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
-from langchain.agents import create_agent
 
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -28,25 +28,24 @@ from .config import AppConfig
 from .graph import build_app as build_workflow_app
 from .memory import MemoryManager
 from .prompts import PROMPTS
+from .rag.core import RAGConfig
 from .state import ResearchState, create_initial_state
 from .tools import (
-    extract_requirements,
-    outline_from_topics,
     dedupe_lines,
-    web_search_stub,
-    local_docs_lookup_stub,
-    search_knowledge_base,
+    extract_requirements,
     init_rag_system,
+    local_docs_lookup_stub,
     merge_notes,
-    summarize_points,
+    outline_from_topics,
+    search_knowledge_base,
     simple_calculator,
+    summarize_points,
+    web_search_stub,
 )
-from .rag.core import RAGConfig
-
 
 logger = logging.getLogger("mult_agents")
 
-MEMORY_MANAGER: Optional[MemoryManager] = None
+MEMORY_MANAGER: MemoryManager | None = None
 CHECKPOINTER_CONTEXT = None
 
 from .common import colorize
@@ -255,7 +254,7 @@ def write_node(state: ResearchState, agent, agent_name: str) -> ResearchState:
     }
 
 
-def build_memory_manager(config: AppConfig) -> Optional[MemoryManager]:
+def build_memory_manager(config: AppConfig) -> MemoryManager | None:
     if not config.enable_memory:
         return None
     try:
@@ -277,8 +276,8 @@ def build_memory_manager(config: AppConfig) -> Optional[MemoryManager]:
             milvus_collection=config.milvus_collection,
             embedding_api_key=config.api_key,
         )
-    except Exception as exc:
-        logger.exception("初始化 MemoryManager 失败，已禁用外部记忆: %s", exc)
+    except Exception:
+        logger.exception("初始化 MemoryManager 失败，已禁用外部记忆")
         return None
 
 

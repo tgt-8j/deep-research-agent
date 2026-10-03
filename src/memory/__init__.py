@@ -15,12 +15,12 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 try:
+    from app.mult_agents.memory.base import MemoryEntry, MemoryType
     from app.mult_agents.memory.manager import MemoryManager
-    from app.mult_agents.memory.base import MemoryType, MemoryEntry
     from app.mult_agents.memory.utils import (
+        create_memory_checkpoint,
         extract_memory_from_messages,
         format_memories_for_prompt,
-        create_memory_checkpoint,
     )
 except ImportError as e:
     MemoryManager = None  # type: ignore
@@ -32,10 +32,10 @@ except ImportError as e:
     print(f"Warning: memory import failed: {e}", file=sys.stderr)
 
 __all__ = [
+    "MemoryEntry",
     "MemoryManager",
     "MemoryType",
-    "MemoryEntry",
+    "create_memory_checkpoint",
     "extract_memory_from_messages",
     "format_memories_for_prompt",
-    "create_memory_checkpoint",
 ]

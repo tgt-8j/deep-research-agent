@@ -8,10 +8,11 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
+from app.metrics import track_node
+
 from ...prompt.loader import load_prompt
 from ...prompt.models import AnalysisOutput, FindingItem
 from ...state import ResearchState
-from app.metrics import track_node
 
 logger = logging.getLogger("research.nodes.analyze")
 
@@ -34,12 +35,14 @@ async def analyze_node(
     evidence_pool = state.get("evidence_pool", [])
     if not evidence_pool:
         logger.warning("[analyze] 证据池为空，使用默认分析")
-        findings = [{
-            "claim_id": "c_1",
-            "claim": f"围绕'{state['query']}'已完成检索，但暂无可用证据。",
-            "confidence": "low",
-            "source_ids": [],
-        }]
+        findings = [
+            {
+                "claim_id": "c_1",
+                "claim": f"围绕'{state['query']}'已完成检索，但暂无可用证据。",
+                "confidence": "low",
+                "source_ids": [],
+            }
+        ]
         if progress:
             progress("analyze", step="证据不足，生成默认分析", status="success")
         return {
@@ -76,23 +79,33 @@ async def analyze_node(
             missing_gaps = parsed.get("missing_gaps", [])
             analysis_summary = parsed.get("analysis_summary", content)
         except (json.JSONDecodeError, AttributeError):
-            findings = [{
-                "claim_id": "c_1",
-                "claim": f"围绕'{state['query']}'已完成多源检索，初步证据表明问题可从网络与本地知识库双侧支撑。",
-                "confidence": "medium",
-                "source_ids": [e.get("source_id") for e in evidence_pool[:3] if e.get("source_id")],
-            }]
+            findings = [
+                {
+                    "claim_id": "c_1",
+                    "claim": f"围绕'{state['query']}'已完成多源检索，初步证据表明问题可从网络与本地知识库双侧支撑。",
+                    "confidence": "medium",
+                    "source_ids": [
+                        e.get("source_id")
+                        for e in evidence_pool[:3]
+                        if e.get("source_id")
+                    ],
+                }
+            ]
             claim_map = [{"claim_id": "c_1", "source_ids": findings[0]["source_ids"]}]
             needs_more_research = False
             missing_gaps = []
             analysis_summary = content
     else:
-        findings = [{
-            "claim_id": "c_1",
-            "claim": f"围绕'{state['query']}'已完成多源检索。",
-            "confidence": "medium",
-            "source_ids": [e.get("source_id") for e in evidence_pool[:3] if e.get("source_id")],
-        }]
+        findings = [
+            {
+                "claim_id": "c_1",
+                "claim": f"围绕'{state['query']}'已完成多源检索。",
+                "confidence": "medium",
+                "source_ids": [
+                    e.get("source_id") for e in evidence_pool[:3] if e.get("source_id")
+                ],
+            }
+        ]
         claim_map = [{"claim_id": "c_1", "source_ids": findings[0]["source_ids"]}]
         needs_more_research = False
         missing_gaps = []

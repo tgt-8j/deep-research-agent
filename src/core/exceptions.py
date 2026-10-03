@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -33,7 +33,7 @@ class AppError(Exception):
         code: str,
         message: str,
         status_code: int = 500,
-        details: Optional[Any] = None,
+        details: Any | None = None,
     ):
         self.code = code
         self.message = message
@@ -82,7 +82,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         logger.warning(
             "AppError | code=%s | status=%d | path=%s",
-            exc.code, exc.status_code, request.url.path,
+            exc.code,
+            exc.status_code,
+            request.url.path,
         )
         return JSONResponse(
             status_code=exc.status_code,
@@ -99,7 +101,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def universal_error_handler(request: Request, exc: Exception) -> JSONResponse:
         logger.exception(
             "Unhandled exception | path=%s | error=%s",
-            request.url.path, exc,
+            request.url.path,
+            exc,
         )
         return JSONResponse(
             status_code=500,

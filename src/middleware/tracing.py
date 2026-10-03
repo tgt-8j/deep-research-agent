@@ -8,13 +8,13 @@
 
 from __future__ import annotations
 
-import time
 import logging
-from typing import Callable
+import time
+from collections.abc import Callable
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Request, Response
 
-from ..core.log import set_request_id, get_request_id
+from ..core.log import set_request_id
 
 logger = logging.getLogger("research.middleware.tracing")
 
@@ -28,16 +28,26 @@ async def tracing_middleware(request: Request, call_next: Callable) -> Response:
     try:
         # 记录请求开始
         start_time = time.perf_counter()
-        logger.info("REQUEST START | method=%s | path=%s | rid=%s",
-                     request.method, request.url.path, request_id)
+        logger.info(
+            "REQUEST START | method=%s | path=%s | rid=%s",
+            request.method,
+            request.url.path,
+            request_id,
+        )
 
         # 执行请求
         response = await call_next(request)
 
         # 记录请求结束
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info("REQUEST END  | method=%s | path=%s | status=%d | duration=%.1fms | rid=%s",
-                     request.method, request.url.path, response.status_code, duration_ms, request_id)
+        logger.info(
+            "REQUEST END  | method=%s | path=%s | status=%d | duration=%.1fms | rid=%s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+            request_id,
+        )
 
         # 将 request_id 添加到响应头，方便前端追踪
         response.headers["x-request-id"] = request_id

@@ -1,16 +1,17 @@
 """单元测试：retrieval 模块。"""
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 _project_root = Path(__file__).resolve().parents[1]
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from src.retrieval.web_search import (
-    _is_official_domain,
     _is_bad_web_domain,
+    _is_official_domain,
     _safe_url,
 )
 

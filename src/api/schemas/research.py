@@ -15,7 +15,9 @@ class ResearchRequest(BaseModel):
     user_id: str = Field(default="default_user", description="用户 ID")
     thread_id: str = Field(default="default_thread", description="会话线程 ID")
     tenant_id: str = Field(default="default_tenant", description="租户 ID")
-    max_iterations: int | None = Field(default=None, ge=1, le=5, description="最大反思循环次数")
+    max_iterations: int | None = Field(
+        default=None, ge=1, le=5, description="最大反思循环次数"
+    )
     enable_memory: bool | None = Field(default=None, description="是否启用记忆功能")
 
 
@@ -27,7 +29,9 @@ class ResearchResponse(BaseModel):
     thread_id: str
     tenant_id: str
     final: str
-    intent: str = Field(default="multiagent", description="路由结果：direct | multiagent")
+    intent: str = Field(
+        default="multiagent", description="路由结果：direct | multiagent"
+    )
 
 
 class StreamResponse(BaseModel):

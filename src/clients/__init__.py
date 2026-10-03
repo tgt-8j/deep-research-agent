@@ -22,10 +22,10 @@ class ClientManager:
 
     def __init__(self, name: str):
         self.name = name
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
 
     @property
-    def client(self) -> Optional[Any]:
+    def client(self) -> Any | None:
         return self._client
 
     @property
@@ -59,6 +59,7 @@ class MilvusClientManager(ClientManager):
             return
         try:
             from ..retrieval.knowledge_base import create_knowledge_base_client
+
             self._rag_system = create_knowledge_base_client(
                 milvus_host=self._host,
                 milvus_port=self._port,
@@ -67,8 +68,12 @@ class MilvusClientManager(ClientManager):
                 api_key=api_key,
             )
             self._client = self._rag_system
-            logger.info("[Milvus] connected | host=%s:%d collection=%s",
-                        self._host, self._port, self._collection)
+            logger.info(
+                "[Milvus] connected | host=%s:%d collection=%s",
+                self._host,
+                self._port,
+                self._collection,
+            )
         except Exception as e:
             logger.warning("[Milvus] init failed: %s", e)
 
@@ -86,6 +91,7 @@ class SessionStoreManager(ClientManager):
 
     def init(self) -> None:
         from ..persistence.session_store import SessionStore
+
         self._client = SessionStore(storage_root=self._storage_root)
         logger.info("[SessionStore] initialized | root=%s", self._storage_root)
 
@@ -94,12 +100,13 @@ class SessionStoreManager(ClientManager):
 # 全局管理器单例
 # =====================================================================
 
-_milvus_manager: Optional[MilvusClientManager] = None
-_session_manager: Optional[SessionStoreManager] = None
+_milvus_manager: MilvusClientManager | None = None
+_session_manager: SessionStoreManager | None = None
 
 
-def get_milvus_manager(host: str, port: int, collection: str,
-                        enable: bool = True) -> MilvusClientManager:
+def get_milvus_manager(
+    host: str, port: int, collection: str, enable: bool = True
+) -> MilvusClientManager:
     """获取或创建 Milvus 客户端管理器单例。"""
     global _milvus_manager
     if _milvus_manager is None:

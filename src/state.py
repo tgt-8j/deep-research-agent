@@ -9,10 +9,9 @@
 from __future__ import annotations
 
 import operator
-from typing import Annotated, List, TypedDict
+from typing import Annotated, TypedDict
 
 from langchain_core.messages import BaseMessage
-
 
 # ---------------------------------------------------------------------------
 # 业务子状态类型
@@ -38,7 +37,7 @@ class OutlineSection(TypedDict, total=False):
     requires_data: bool
     requires_chart: bool
     priority: int
-    search_queries: List[str]
+    search_queries: list[str]
     status: str
 
 
@@ -52,7 +51,7 @@ class EvidenceItem(TypedDict, total=False):
     doc_id: str
     snippet: str
     domain: str
-    supports_questions: List[str]
+    supports_questions: list[str]
     reliability_score: float
     reliability_reason: str
     notes: str
@@ -72,7 +71,7 @@ class Finding(TypedDict, total=False):
     claim_id: str
     claim: str
     confidence: str  # "high" | "medium" | "low"
-    source_ids: List[str]
+    source_ids: list[str]
 
 
 class SourceIndexItem(TypedDict, total=False):
@@ -103,9 +102,9 @@ class QueryTrace(TypedDict, total=False):
     reason: str
     source_preference: str
     raw_count: int
-    raw_records: List[dict]
-    kept_source_ids: List[str]
-    rejected_source_ids: List[str]
+    raw_records: list[dict]
+    kept_source_ids: list[str]
+    rejected_source_ids: list[str]
     rejected_count: int
 
 
@@ -121,57 +120,57 @@ class ResearchState(TypedDict, total=False):
     """
 
     # -- 请求入口 --
-    query: str                          # 用户原始问题
+    query: str  # 用户原始问题
     user_id: str
     tenant_id: str
-    memory_context: str                 # 从短期/长期记忆中注入的上下文
+    memory_context: str  # 从短期/长期记忆中注入的上下文
 
     # -- 控制流 --
-    messages: Annotated[List[BaseMessage], operator.add]
-    intent: str                         # "direct" | "multiagent"
-    phase: str                          # 当前所处阶段标识
-    iteration: int                      # 反思循环次数
+    messages: Annotated[list[BaseMessage], operator.add]
+    intent: str  # "direct" | "multiagent"
+    phase: str  # 当前所处阶段标识
+    iteration: int  # 反思循环次数
     max_iterations: int
 
     # -- 查询改写阶段产物 --
-    rewritten_queries: List[str]          # 经 LLM 改写后的搜索词列表
+    rewritten_queries: list[str]  # 经 LLM 改写后的搜索词列表
 
     # -- 规划阶段产物 --
     objective: str
-    outline: List[OutlineSection]       # 结构化大纲
-    sub_questions: List[str]            # 拆解后的子问题
-    research_questions: List[str]       # 研究问题列表
-    search_plan: List[SearchQueryPlan]  # 搜索计划
-    budget: dict                        # token/轮次预算
+    outline: list[OutlineSection]  # 结构化大纲
+    sub_questions: list[str]  # 拆解后的子问题
+    research_questions: list[str]  # 研究问题列表
+    search_plan: list[SearchQueryPlan]  # 搜索计划
+    budget: dict  # token/轮次预算
 
     # -- 检索阶段产物 --
-    web_search: str                     # Web Scout 返回的摘要文本
-    local_rag: str                      # Local Scout 返回的摘要文本
-    web_evidence: List[EvidenceItem]    # 网页证据列表
-    local_evidence: List[EvidenceItem]  # 本地证据列表
+    web_search: str  # Web Scout 返回的摘要文本
+    local_rag: str  # Local Scout 返回的摘要文本
+    web_evidence: list[EvidenceItem]  # 网页证据列表
+    local_evidence: list[EvidenceItem]  # 本地证据列表
     web_retrieval_stats: RetrievalStats
     local_retrieval_stats: RetrievalStats
-    web_search_trace: List[QueryTrace]
-    local_rag_trace: List[QueryTrace]
+    web_search_trace: list[QueryTrace]
+    local_rag_trace: list[QueryTrace]
 
     # -- 证据裁判阶段产物 --
-    deep_dive: str                      # Evidence Judge 摘要
-    evidence_pool: List[EvidenceItem]   # 综合证据池
-    audit_flags: List[AuditFlag]        # 审计标记
-    source_index: List[SourceIndexItem] # 来源索引
-    rerank_stats: dict                  # Rerank 重排序统计信息
+    deep_dive: str  # Evidence Judge 摘要
+    evidence_pool: list[EvidenceItem]  # 综合证据池
+    audit_flags: list[AuditFlag]  # 审计标记
+    source_index: list[SourceIndexItem]  # 来源索引
+    rerank_stats: dict  # Rerank 重排序统计信息
 
     # -- 分析阶段产物 --
-    analysis: str                       # Analyst 摘要
-    findings: List[Finding]             # 结论列表
-    claim_map: List[dict]               # claim_id -> source_ids 映射
+    analysis: str  # Analyst 摘要
+    findings: list[Finding]  # 结论列表
+    claim_map: list[dict]  # claim_id -> source_ids 映射
     needs_more_research: bool
-    missing_gaps: List[str]
+    missing_gaps: list[str]
 
     # -- 补搜阶段产物 --
-    supplementary_queries: List[SearchQueryPlan]
+    supplementary_queries: list[SearchQueryPlan]
 
     # -- 写作阶段产物 --
     draft: str
     final: str
-    code: str                           # CodeAgent 输出（可选）
+    code: str  # CodeAgent 输出（可选）

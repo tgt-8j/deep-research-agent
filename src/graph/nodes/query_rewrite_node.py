@@ -11,9 +11,10 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
+from app.metrics import track_node
+
 from ...prompt.loader import load_prompt
 from ...state import ResearchState
-from app.metrics import track_node
 
 logger = logging.getLogger("research.nodes.query_rewrite")
 
@@ -21,13 +22,30 @@ logger = logging.getLogger("research.nodes.query_rewrite")
 def _default_rewrite(query: str) -> list[str]:
     """LLM 调用失败时的兜底改写策略。"""
     import re
-    lowered = query.lower()
+
+    query.lower()
     # 提取核心实体
     chinese_terms = re.findall(r"[一-鿿]{2,}", query)
     english_terms = re.findall(r"[a-zA-Z]{3,}", query)
-    entities = [t for t in chinese_terms + english_terms
-                if t not in {"帮我", "调查", "最新", "使用趋势", "是什么", "多少",
-                             "情况", "关于", "这个", "那个", "如何", "怎么"}]
+    entities = [
+        t
+        for t in chinese_terms + english_terms
+        if t
+        not in {
+            "帮我",
+            "调查",
+            "最新",
+            "使用趋势",
+            "是什么",
+            "多少",
+            "情况",
+            "关于",
+            "这个",
+            "那个",
+            "如何",
+            "怎么",
+        }
+    ]
 
     if not entities:
         return [query.strip()]
@@ -88,12 +106,13 @@ async def query_rewrite_node(
             cleaned = content.strip()
             if cleaned.startswith("```"):
                 import re as _re
+
                 cleaned = _re.sub(r"^```(?:json)?", "", cleaned).strip()
                 cleaned = _re.sub(r"```$", "", cleaned).strip()
             start = cleaned.find("{")
             end = cleaned.rfind("}")
             if start != -1 and end > start:
-                parsed = json.loads(cleaned[start:end + 1])
+                parsed = json.loads(cleaned[start : end + 1])
                 rewritten = parsed.get("rewritten_queries", [])
             else:
                 rewritten = _default_rewrite(query)
@@ -110,10 +129,18 @@ async def query_rewrite_node(
             deduped.append(q_stripped)
     rewritten_queries = deduped[:6]
 
-    logger.info("[query_rewrite] 改写完成，生成 %d 个查询: %s", len(rewritten_queries), rewritten_queries)
+    logger.info(
+        "[query_rewrite] 改写完成，生成 %d 个查询: %s",
+        len(rewritten_queries),
+        rewritten_queries,
+    )
 
     if progress:
-        progress("query_rewrite", step=f"生成 {len(rewritten_queries)} 个查询变体", status="success")
+        progress(
+            "query_rewrite",
+            step=f"生成 {len(rewritten_queries)} 个查询变体",
+            status="success",
+        )
 
     return {
         "rewritten_queries": rewritten_queries,

@@ -11,8 +11,13 @@ from contextlib import contextmanager
 from functools import wraps
 from typing import Any, Callable, ContextManager
 
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
-from prometheus_client import CollectorRegistry
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Histogram,
+    generate_latest,
+)
 from starlette.responses import Response
 
 logger = logging.getLogger("metrics")
@@ -54,7 +59,7 @@ def track_node(node_name: str) -> Callable:
             try:
                 result = await func(*args, **kwargs)
                 return result
-            except Exception as exc:
+            except Exception:
                 ERROR_COUNTER.labels(phase=node_name).inc()
                 raise
             finally:

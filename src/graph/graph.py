@@ -11,26 +11,27 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
 
+from ..state import ResearchState
 from .nodes import (
-    intent_node,
-    query_rewrite_node,
-    direct_answer_node,
-    plan_node,
-    web_search_node,
-    local_rag_node,
-    rerank_node,
-    deep_dive_node,
-    approval_node,
     analyze_node,
+    approval_node,
+    deep_dive_node,
+    direct_answer_node,
+    intent_node,
+    local_rag_node,
+    plan_node,
+    query_rewrite_node,
     reflect_node,
+    rerank_node,
+    web_search_node,
     write_node,
 )
-from ..state import ResearchState
 
 logger = logging.getLogger("research.graph")
 
@@ -116,6 +117,7 @@ def build_graph(
     def _make_node(node_fn: Callable) -> Callable:
         def wrapped(state: ResearchState, **kwargs) -> dict:
             from ..context import ResearchRuntimeContext
+
             context: ResearchRuntimeContext = {
                 "llm": llm,
                 "kb_client": kb_client,
@@ -123,6 +125,7 @@ def build_graph(
                 "retrieval_config": {"bocha_api_key": bocha_api_key},
                 "cancellation": cancellation,  # 传递取消信号
             }
+
             # 将 context 注入到 kwargs 中，节点通过 runtime.context 访问
             class Runtime:
                 class context:
@@ -131,22 +134,53 @@ def build_graph(
                     progress_emitter = context["progress_emitter"]
                     retrieval_config = context["retrieval_config"]
                     cancellation = context["cancellation"]
+
             return node_fn(state, Runtime)
+
         return wrapped
 
     # 添加节点（每个节点都包裹取消边界）
-    workflow.add_node("intent", _with_cancellation_boundary("intent", _make_node(intent_node)))
-    workflow.add_node("query_rewrite", _with_cancellation_boundary("query_rewrite", _make_node(query_rewrite_node)))
-    workflow.add_node("direct_answer", _with_cancellation_boundary("direct_answer", _make_node(direct_answer_node)))
-    workflow.add_node("plan", _with_cancellation_boundary("plan", _make_node(plan_node)))
-    workflow.add_node("web_search", _with_cancellation_boundary("web_search", _make_node(web_search_node)))
-    workflow.add_node("local_rag", _with_cancellation_boundary("local_rag", _make_node(local_rag_node)))
-    workflow.add_node("rerank", _with_cancellation_boundary("rerank", _make_node(rerank_node)))
-    workflow.add_node("deep_dive", _with_cancellation_boundary("deep_dive", _make_node(deep_dive_node)))
-    workflow.add_node("approval", _with_cancellation_boundary("approval", _make_node(approval_node)))
-    workflow.add_node("analyze", _with_cancellation_boundary("analyze", _make_node(analyze_node)))
-    workflow.add_node("reflect", _with_cancellation_boundary("reflect", _make_node(reflect_node)))
-    workflow.add_node("write", _with_cancellation_boundary("write", _make_node(write_node)))
+    workflow.add_node(
+        "intent", _with_cancellation_boundary("intent", _make_node(intent_node))
+    )
+    workflow.add_node(
+        "query_rewrite",
+        _with_cancellation_boundary("query_rewrite", _make_node(query_rewrite_node)),
+    )
+    workflow.add_node(
+        "direct_answer",
+        _with_cancellation_boundary("direct_answer", _make_node(direct_answer_node)),
+    )
+    workflow.add_node(
+        "plan", _with_cancellation_boundary("plan", _make_node(plan_node))
+    )
+    workflow.add_node(
+        "web_search",
+        _with_cancellation_boundary("web_search", _make_node(web_search_node)),
+    )
+    workflow.add_node(
+        "local_rag",
+        _with_cancellation_boundary("local_rag", _make_node(local_rag_node)),
+    )
+    workflow.add_node(
+        "rerank", _with_cancellation_boundary("rerank", _make_node(rerank_node))
+    )
+    workflow.add_node(
+        "deep_dive",
+        _with_cancellation_boundary("deep_dive", _make_node(deep_dive_node)),
+    )
+    workflow.add_node(
+        "approval", _with_cancellation_boundary("approval", _make_node(approval_node))
+    )
+    workflow.add_node(
+        "analyze", _with_cancellation_boundary("analyze", _make_node(analyze_node))
+    )
+    workflow.add_node(
+        "reflect", _with_cancellation_boundary("reflect", _make_node(reflect_node))
+    )
+    workflow.add_node(
+        "write", _with_cancellation_boundary("write", _make_node(write_node))
+    )
 
     # 定义边
     workflow.add_edge(START, "intent")

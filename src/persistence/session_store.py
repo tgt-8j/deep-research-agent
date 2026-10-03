@@ -12,10 +12,9 @@ import json
 import logging
 import sqlite3
 import uuid
-from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("research.persistence")
 
@@ -33,18 +32,18 @@ class Checkpoint:
         session_key: str,
         turn_id: str,
         stage: str,
-        state_snapshot: Dict[str, Any],
-        error: Optional[str] = None,
+        state_snapshot: dict[str, Any],
+        error: str | None = None,
     ):
         self.id = str(uuid.uuid4())
         self.session_key = session_key
         self.turn_id = turn_id
-        self.stage = stage          # 中断时的阶段名
+        self.stage = stage  # 中断时的阶段名
         self.state_snapshot = state_snapshot
         self.error = error
         self.created_at = datetime.now().isoformat()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "session_key": self.session_key,
@@ -56,7 +55,7 @@ class Checkpoint:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Checkpoint":
+    def from_dict(cls, data: dict[str, Any]) -> Checkpoint:
         return cls(
             session_key=data["session_key"],
             turn_id=data["turn_id"],
@@ -147,7 +146,9 @@ class SessionStore:
             )
             conn.commit()
 
-    def update_session_status(self, session_key: str, status: str, final_result: str = "") -> None:
+    def update_session_status(
+        self, session_key: str, status: str, final_result: str = ""
+    ) -> None:
         with self._connection() as conn:
             conn.execute(
                 """
@@ -158,7 +159,7 @@ class SessionStore:
             )
             conn.commit()
 
-    def get_session(self, session_key: str) -> Optional[Dict[str, Any]]:
+    def get_session(self, session_key: str) -> dict[str, Any] | None:
         with self._connection() as conn:
             row = conn.execute(
                 "SELECT * FROM session WHERE session_key = ?", (session_key,)
@@ -167,7 +168,7 @@ class SessionStore:
             return dict(row)
         return None
 
-    def list_sessions(self, user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def list_sessions(self, user_id: str, limit: int = 20) -> list[dict[str, Any]]:
         with self._connection() as conn:
             rows = conn.execute(
                 "SELECT session_key, title, query, status, created_at FROM session "
@@ -180,8 +181,14 @@ class SessionStore:
     # 事件日志
     # ------------------------------------------------------------------
 
-    def append_event(self, session_key: str, turn_id: str, event_type: str,
-                     content: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+    def append_event(
+        self,
+        session_key: str,
+        turn_id: str,
+        event_type: str,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         with self._connection() as conn:
             conn.execute(
                 """
@@ -190,14 +197,17 @@ class SessionStore:
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    session_key, turn_id, event_type, content,
+                    session_key,
+                    turn_id,
+                    event_type,
+                    content,
                     json.dumps(metadata or {}, ensure_ascii=False),
                     datetime.now().isoformat(),
                 ),
             )
             conn.commit()
 
-    def get_events(self, session_key: str, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_events(self, session_key: str, limit: int = 100) -> list[dict[str, Any]]:
         with self._connection() as conn:
             rows = conn.execute(
                 "SELECT event_type, content, metadata, created_at FROM event_log "
@@ -235,20 +245,29 @@ class SessionStore:
                 VALUES (?, ?, 'checkpoint_saved', ?, ?, ?)
                 """,
                 (
-                    checkpoint.session_key, checkpoint.turn_id,
-                    json.dumps({"stage": checkpoint.stage, "checkpoint_id": checkpoint.id},
-                               ensure_ascii=False),
-                    json.dumps({"checkpoint_id": checkpoint.id, "stage": checkpoint.stage},
-                               ensure_ascii=False),
+                    checkpoint.session_key,
+                    checkpoint.turn_id,
+                    json.dumps(
+                        {"stage": checkpoint.stage, "checkpoint_id": checkpoint.id},
+                        ensure_ascii=False,
+                    ),
+                    json.dumps(
+                        {"checkpoint_id": checkpoint.id, "stage": checkpoint.stage},
+                        ensure_ascii=False,
+                    ),
                     datetime.now().isoformat(),
                 ),
             )
             conn.commit()
-        logger.info("Checkpoint 已保存 | id=%s stage=%s session=%s",
-                     checkpoint.id, checkpoint.stage, checkpoint.session_key)
+        logger.info(
+            "Checkpoint 已保存 | id=%s stage=%s session=%s",
+            checkpoint.id,
+            checkpoint.stage,
+            checkpoint.session_key,
+        )
         return checkpoint.id
 
-    def load_checkpoint(self, checkpoint_id: str) -> Optional[Checkpoint]:
+    def load_checkpoint(self, checkpoint_id: str) -> Checkpoint | None:
         """从文件系统加载 Checkpoint。"""
         cp_path = self.checkpoints_dir / f"{checkpoint_id}.json"
         if not cp_path.exists():
@@ -260,7 +279,7 @@ class SessionStore:
             logger.warning("Checkpoint 加载失败 | id=%s error=%s", checkpoint_id, e)
             return None
 
-    def get_latest_checkpoint(self, session_key: str) -> Optional[Checkpoint]:
+    def get_latest_checkpoint(self, session_key: str) -> Checkpoint | None:
         """获取某个会话的最新 Checkpoint。"""
         with self._connection() as conn:
             row = conn.execute(
@@ -279,7 +298,7 @@ class SessionStore:
         except Exception:
             return None
 
-    def list_checkpoints(self, session_key: str) -> List[Dict[str, Any]]:
+    def list_checkpoints(self, session_key: str) -> list[dict[str, Any]]:
         """列出某个会话的所有 Checkpoint 摘要。"""
         with self._connection() as conn:
             rows = conn.execute(
@@ -294,11 +313,13 @@ class SessionStore:
         for row in rows:
             try:
                 meta = json.loads(row["metadata"])
-                results.append({
-                    "checkpoint_id": meta.get("checkpoint_id"),
-                    "stage": meta.get("stage"),
-                    "created_at": row["created_at"],
-                })
+                results.append(
+                    {
+                        "checkpoint_id": meta.get("checkpoint_id"),
+                        "stage": meta.get("stage"),
+                        "created_at": row["created_at"],
+                    }
+                )
             except Exception:
                 continue
         return results

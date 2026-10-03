@@ -4,39 +4,37 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from mult_agents.nodes import (
-    _extract_json_block,
-    _load_json,
-    _fallback_analysis,
-    _render_fallback_report,
-    _build_source_lookup,
     _assign_source_ids,
-    _enrich_evidence_from_raw,
-    _prune_evidence_to_allowed_sources,
+    _build_source_lookup,
     _dedupe_sources,
-    _is_bad_web_domain,
+    _enrich_evidence_from_raw,
+    _estimate_relevance,
+    _extract_json_block,
+    _extract_query_terms,
+    _fallback_analysis,
     _filter_web_records,
     _format_raw_records,
+    _guess_primary_entity,
+    _is_bad_web_domain,
+    _is_official_domain,
+    _load_json,
     _minimal_record_filter,
     _normalize_source_ids,
+    _prune_evidence_to_allowed_sources,
+    _render_fallback_report,
     collect_tool_calls,
-    _guess_primary_entity,
-    _extract_query_terms,
-    _estimate_relevance,
-    _is_official_domain,
 )
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-
 
 # ── JSON 解析 ──────────────────────────────────────────────
 
+
 class TestJsonHelpers:
     def test_extract_json_block_with_wrapping(self):
-        text = "Here is the result:\n```json\n{\"key\": \"value\"}\n```"
+        text = 'Here is the result:\n```json\n{"key": "value"}\n```'
         result = _extract_json_block(text)
         parsed = json.loads(result)
         assert parsed["key"] == "value"
@@ -63,6 +61,7 @@ class TestJsonHelpers:
 
 # ── 工具调用收集 ───────────────────────────────────────────
 
+
 class TestCollectToolCalls:
     def test_no_tool_calls(self):
         messages = [HumanMessage(content="hello"), AIMessage(content="hi")]
@@ -75,15 +74,17 @@ class TestCollectToolCalls:
             HumanMessage(content="search"),
             AIMessage(
                 content="",
-                tool_calls=[{
-                    "id": "call_1",
-                    "name": "web_search",
-                    "args": {"query": "test"},
-                }],
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "name": "web_search",
+                        "args": {"query": "test"},
+                    }
+                ],
             ),
             ToolMessage(content="result", tool_call_id="call_1"),
         ]
-        tools, outputs = collect_tool_calls(messages)
+        tools, _outputs = collect_tool_calls(messages)
         assert "web_search" in tools
 
     def test_multiple_tool_calls(self):
@@ -96,12 +97,13 @@ class TestCollectToolCalls:
                 ],
             ),
         ]
-        tools, outputs = collect_tool_calls(messages)
+        tools, _outputs = collect_tool_calls(messages)
         assert "tool_a" in tools
         assert "tool_b" in tools
 
 
 # ── 来源处理 ───────────────────────────────────────────────
+
 
 class TestSourceProcessing:
     def test_assign_source_ids(self):
@@ -144,6 +146,7 @@ class TestSourceProcessing:
 
 # ── 域名过滤 ───────────────────────────────────────────────
 
+
 class TestDomainFilter:
     def test_bad_domain_with_blocked_keyword(self):
         assert _is_bad_web_domain("example-downsite.com") is True
@@ -161,6 +164,7 @@ class TestDomainFilter:
 
 # ── 查询处理 ───────────────────────────────────────────────
 
+
 class TestQueryProcessing:
     def test_extract_query_terms(self):
         terms = _extract_query_terms("LangGraph multi-agent system")
@@ -172,7 +176,9 @@ class TestQueryProcessing:
         assert "langgraph" in entity.lower() or entity.lower() == "tell"
 
     def test_estimate_relevance_high(self):
-        score = _estimate_relevance("Python programming", "Python is a programming language")
+        score = _estimate_relevance(
+            "Python programming", "Python is a programming language"
+        )
         assert score > 0
 
     def test_estimate_relevance_low(self):
@@ -191,6 +197,7 @@ class TestQueryProcessing:
 
 
 # ── 格式化 ─────────────────────────────────────────────────
+
 
 class TestFormatting:
     def test_format_raw_records(self):
@@ -212,6 +219,7 @@ class TestFormatting:
 
 
 # ── Fallback ───────────────────────────────────────────────
+
 
 class TestFallbackFunctions:
     def test_fallback_analysis(self):
@@ -246,7 +254,12 @@ class TestFallbackFunctions:
     def test_build_source_lookup(self):
         state = {
             "evidence_pool": [
-                {"source_id": "WEB1_1", "title": "Title A", "url": "http://a.com", "source_type": "web"},
+                {
+                    "source_id": "WEB1_1",
+                    "title": "Title A",
+                    "url": "http://a.com",
+                    "source_type": "web",
+                },
             ],
         }
         lookup = _build_source_lookup(state)

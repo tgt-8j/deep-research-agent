@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage
 from langchain_core.tools import BaseTool
 
 try:
@@ -34,7 +34,7 @@ class LLMAdapter:
 
     def __init__(self, config: ModelConfig):
         self.config = config
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
 
     def _get_client(self):
         """延迟初始化，避免模块导入时立即建立连接。"""
@@ -51,7 +51,7 @@ class LLMAdapter:
     def invoke(
         self,
         messages: list[BaseMessage],
-        tools: Optional[list[BaseTool]] = None,
+        tools: list[BaseTool] | None = None,
     ) -> dict:
         """同步调用 LLM，返回标准格式的 result dict。"""
         client = self._get_client()
@@ -65,7 +65,7 @@ class LLMAdapter:
     async def ainvoke(
         self,
         messages: list[BaseMessage],
-        tools: Optional[list[BaseTool]] = None,
+        tools: list[BaseTool] | None = None,
     ) -> dict:
         """异步调用 LLM。"""
         client = self._get_client()

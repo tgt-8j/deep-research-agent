@@ -12,13 +12,13 @@ import logging
 import sys
 import uuid
 from contextvars import ContextVar
-from typing import Any, Optional
+from typing import Any
 
 # 每个请求的独立 request_id，用于日志串联排查
 _request_id_var: ContextVar[str] = ContextVar("request_id", default="unknown")
 
 
-def set_request_id(request_id: Optional[str] = None) -> str:
+def set_request_id(request_id: str | None = None) -> str:
     """为当前请求设置 request_id，返回实际使用的 ID。"""
     rid = request_id or str(uuid.uuid4())[:8]
     _request_id_var.set(rid)
@@ -59,7 +59,9 @@ class RequestLogger:
         self._logger.warning(self._fmt(msg, **extra))
 
     def error(self, msg: str, **extra: Any) -> None:
-        self._logger.error(self._fmt(msg, **extra), exc_info=extra.pop("exc_info", None))
+        self._logger.error(
+            self._fmt(msg, **extra), exc_info=extra.pop("exc_info", None)
+        )
 
     def exception(self, msg: str, **extra: Any) -> None:
         self._logger.exception(self._fmt(msg, **extra))

@@ -23,9 +23,9 @@ class BaseLongTermMemory(BaseMemory, ABC):
     
     def __init__(self, memory_type: MemoryType):
         super().__init__(memory_type)
-        self._embedding_dim: Optional[int] = None
+        self._embedding_dim: int | None = None
     
-    def _generate_embedding(self, text: str) -> List[float]:
+    def _generate_embedding(self, text: str) -> list[float]:
         """
         生成文本的向量嵌入（简化版本）
         
@@ -58,7 +58,7 @@ class BaseLongTermMemory(BaseMemory, ABC):
         
         return embedding[:384]
     
-    def _calculate_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+    def _calculate_similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """计算余弦相似度"""
         if len(vec1) != len(vec2):
             return 0.0
@@ -83,7 +83,7 @@ class SQLiteLongTermMemory(BaseLongTermMemory):
     def __init__(
         self,
         memory_type: MemoryType,
-        db_path: Optional[str] = None,
+        db_path: str | None = None,
     ):
         super().__init__(memory_type)
         
@@ -167,7 +167,7 @@ class SQLiteLongTermMemory(BaseLongTermMemory):
         logger.debug(f"长期记忆已保存: {entry.id}")
         return entry.id
     
-    def get(self, memory_id: str) -> Optional[MemoryEntry]:
+    def get(self, memory_id: str) -> MemoryEntry | None:
         """获取指定 ID 的记忆"""
         with self._get_connection() as conn:
             row = conn.execute(
@@ -183,11 +183,11 @@ class SQLiteLongTermMemory(BaseLongTermMemory):
     def search(
         self,
         query: str,
-        user_id: Optional[str] = None,
-        namespace: Optional[str] = None,
+        user_id: str | None = None,
+        namespace: str | None = None,
         limit: int = 5,
         **kwargs
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         """
         搜索记忆
         
@@ -254,8 +254,8 @@ class SQLiteLongTermMemory(BaseLongTermMemory):
     
     def clear(
         self,
-        user_id: Optional[str] = None,
-        namespace: Optional[str] = None
+        user_id: str | None = None,
+        namespace: str | None = None
     ) -> int:
         """清除记忆"""
         conditions = ["memory_type = ?"]
@@ -279,7 +279,7 @@ class SQLiteLongTermMemory(BaseLongTermMemory):
             conn.commit()
             return cursor.rowcount
     
-    def list_namespaces(self, user_id: Optional[str] = None) -> List[str]:
+    def list_namespaces(self, user_id: str | None = None) -> list[str]:
         """列出所有命名空间"""
         query = "SELECT DISTINCT namespace FROM memories WHERE memory_type = ?"
         params = [self.memory_type.value]
@@ -339,13 +339,13 @@ class SemanticMemoryStore(SQLiteLongTermMemory):
     - "facts": 事实知识
     """
     
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         super().__init__(MemoryType.SEMANTIC, db_path)
     
     def save_profile(
         self,
         user_id: str,
-        profile_data: Dict[str, Any],
+        profile_data: dict[str, Any],
         merge: bool = True
     ) -> str:
         """
@@ -376,7 +376,7 @@ class SemanticMemoryStore(SQLiteLongTermMemory):
         
         return self.save(entry)
     
-    def get_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def get_profile(self, user_id: str) -> dict[str, Any] | None:
         """获取用户画像"""
         results = self.search(
             query="user_profile",
@@ -399,7 +399,7 @@ class SemanticMemoryStore(SQLiteLongTermMemory):
         self,
         user_id: str,
         fact: str,
-        category: Optional[str] = None
+        category: str | None = None
     ) -> str:
         """
         保存事实知识
@@ -434,15 +434,15 @@ class EpisodicMemoryStore(SQLiteLongTermMemory):
     - "actions": 操作记录
     """
     
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         super().__init__(MemoryType.EPISODIC, db_path)
     
     def save_task_record(
         self,
         user_id: str,
         task_type: str,
-        task_data: Dict[str, Any],
-        outcome: Optional[str] = None
+        task_data: dict[str, Any],
+        outcome: str | None = None
     ) -> str:
         """
         保存任务执行记录
@@ -478,7 +478,7 @@ class EpisodicMemoryStore(SQLiteLongTermMemory):
         user_id: str,
         task_description: str,
         limit: int = 5
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         """
         获取相似的历史任务
         
@@ -499,9 +499,9 @@ class EpisodicMemoryStore(SQLiteLongTermMemory):
     def get_task_history(
         self,
         user_id: str,
-        task_type: Optional[str] = None,
+        task_type: str | None = None,
         limit: int = 10
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         """
         获取任务历史
         
@@ -546,15 +546,15 @@ class ProceduralMemoryStore(SQLiteLongTermMemory):
     - "workflow/{task}": 特定任务的执行流程
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         super().__init__(MemoryType.PROCEDURAL, db_path)
 
     def save_procedure(
         self,
         user_id: str,
         name: str,
-        steps: List[str],
-        tags: Optional[List[str]] = None,
+        steps: list[str],
+        tags: list[str] | None = None,
     ) -> str:
         """
         保存一个操作步骤
@@ -582,7 +582,7 @@ class ProceduralMemoryStore(SQLiteLongTermMemory):
         )
         return self.save(entry)
 
-    def get_procedure(self, user_id: str, name: str) -> Optional[Dict[str, Any]]:
+    def get_procedure(self, user_id: str, name: str) -> dict[str, Any] | None:
         """按名称获取操作步骤"""
         results = self.search(
             query=name,
@@ -594,7 +594,7 @@ class ProceduralMemoryStore(SQLiteLongTermMemory):
             return results[0].content
         return None
 
-    def list_procedures(self, user_id: str) -> List[str]:
+    def list_procedures(self, user_id: str) -> list[str]:
         """列出该用户所有保存的操作步骤名"""
         with self._get_connection() as conn:
             rows = conn.execute(

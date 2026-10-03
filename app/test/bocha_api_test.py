@@ -3,7 +3,6 @@ import os
 import urllib.error
 import urllib.request
 
-
 BASE_URL = "https://api.bocha.cn/v1"
 WEB_SEARCH_ENDPOINT = f"{BASE_URL}/web-search"
 AI_SEARCH_ENDPOINT = f"{BASE_URL}/ai-search"

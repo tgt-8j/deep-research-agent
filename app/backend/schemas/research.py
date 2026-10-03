@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, field_validator
 import re
+
+from pydantic import BaseModel, Field, field_validator
 
 # 租户/用户标识格式：字母数字 + 连字符 + 下划线，最大 64 字符
 _ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]{1,64}$')

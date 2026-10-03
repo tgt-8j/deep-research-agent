@@ -22,7 +22,6 @@ class BaseRepository:
 
     def close(self) -> None:
         """释放资源。"""
-        pass
 
 
 class WebSearchRepository(BaseRepository):
@@ -38,12 +37,15 @@ class WebSearchRepository(BaseRepository):
         super().__init__("web_search")
         self._api_key = api_key
 
-    def search(self, query: str, count: int = 4) -> List[dict]:
+    def search(self, query: str, count: int = 4) -> list[dict]:
         """执行网页搜索。"""
         from ..retrieval.web_search import bocha_web_search
+
         try:
             records = bocha_web_search(query, count=count, api_key=self._api_key)
-            logger.info("[WebSearchRepo] query=%s | results=%d", query[:50], len(records))
+            logger.info(
+                "[WebSearchRepo] query=%s | results=%d", query[:50], len(records)
+            )
             return records
         except Exception as e:
             logger.error("[WebSearchRepo] search failed: %s", e)
@@ -52,6 +54,7 @@ class WebSearchRepository(BaseRepository):
     def extract_content(self, url: str) -> str:
         """抓取 URL 内容。"""
         from ..retrieval.web_search import extract_url_content
+
         return extract_url_content(url)
 
 
@@ -68,7 +71,7 @@ class KnowledgeBaseRepository(BaseRepository):
         super().__init__("knowledge_base")
         self._client = kb_client
 
-    def search(self, query: str, limit: int = 4) -> List[dict]:
+    def search(self, query: str, limit: int = 4) -> list[dict]:
         """执行知识库检索。"""
         if self._client is None:
             logger.warning("[KBRepo] client not initialized, skipping")
@@ -99,11 +102,16 @@ class SessionRepository(BaseRepository):
         """保存 Checkpoint 并返回 ID。"""
         return self._store.save_checkpoint(checkpoint)
 
-    def load_checkpoint(self, checkpoint_id: str) -> Optional[Any]:
+    def load_checkpoint(self, checkpoint_id: str) -> Any | None:
         """加载 Checkpoint。"""
         return self._store.load_checkpoint(checkpoint_id)
 
-    def append_event(self, session_key: str, event_type: str,
-                     content: str, metadata: Optional[dict] = None) -> None:
+    def append_event(
+        self,
+        session_key: str,
+        event_type: str,
+        content: str,
+        metadata: dict | None = None,
+    ) -> None:
         """追加事件日志。"""
         self._store.append_event(session_key, "turn_1", event_type, content, metadata)

@@ -9,9 +9,10 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 
+from app.metrics import track_node
+
 from ...prompt.loader import load_prompt
 from ...state import ResearchState
-from app.metrics import track_node
 
 logger = logging.getLogger("research.nodes.reflect")
 
@@ -65,19 +66,33 @@ async def reflect_node(
         except (json.JSONDecodeError, AttributeError):
             # Fallback：基于缺失缺口生成简单查询
             supplementary_queries = [
-                {"section_id": f"gap_{i+1}", "query": gap, "source_preference": "hybrid", "reason": f"填补缺口: {gap}"}
+                {
+                    "section_id": f"gap_{i + 1}",
+                    "query": gap,
+                    "source_preference": "hybrid",
+                    "reason": f"填补缺口: {gap}",
+                }
                 for i, gap in enumerate(missing_gaps)
             ]
     else:
         supplementary_queries = [
-            {"section_id": f"gap_{i+1}", "query": gap, "source_preference": "hybrid", "reason": f"填补缺口: {gap}"}
+            {
+                "section_id": f"gap_{i + 1}",
+                "query": gap,
+                "source_preference": "hybrid",
+                "reason": f"填补缺口: {gap}",
+            }
             for i, gap in enumerate(missing_gaps)
         ]
 
     new_iteration = state.get("iteration", 0) + 1
 
     if progress:
-        progress("reflect", step=f"补搜计划生成完成（第 {new_iteration} 轮）", status="success")
+        progress(
+            "reflect",
+            step=f"补搜计划生成完成（第 {new_iteration} 轮）",
+            status="success",
+        )
 
     return {
         "iteration": new_iteration,

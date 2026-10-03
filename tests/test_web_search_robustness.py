@@ -115,7 +115,7 @@ class TestRelevanceFilter:
                 "domain": "example.com",
             }
         ]
-        kept, stats = _filter_records("LangGraph Agent 框架", records)
+        kept, _stats = _filter_records("LangGraph Agent 框架", records)
         # 可能保留（官方域名豁免）或过滤
         assert isinstance(kept, list)
 
@@ -128,7 +128,7 @@ class TestRelevanceFilter:
     def test_blocked_domains(self):
         """被拦截的域名应被过滤。"""
         records = [{"title": "Test", "snippet": "Content", "domain": "doc88.com"}]
-        kept, stats = _filter_records("test", records)
+        _kept, stats = _filter_records("test", records)
         assert stats["dropped_domain"] >= 1
 
 
@@ -195,7 +195,6 @@ class TestBochaWebSearch:
     @pytest.mark.asyncio
     async def test_empty_response(self):
         """空响应应返回空列表。"""
-        mock_response = {"data": {"webPages": {"value": []}}}
         with patch("src.retrieval.web_search._make_request") as mock_req:
             mock_req.return_value = b'{"data":{"webPages":{"value":[]}}}'
             with patch.dict("os.environ", {"BOCHA_API_KEY": "test_key"}):
@@ -247,17 +246,19 @@ class TestBochaWebSearch:
                 )
             return b'{"data":{"webPages":{"value":[]}}}'
 
-        with patch(
-            "src.retrieval.web_search._make_request", side_effect=failing_request
+        with (
+            patch(
+                "src.retrieval.web_search._make_request", side_effect=failing_request
+            ),
+            patch.dict("os.environ", {"BOCHA_API_KEY": "test_key"}),
         ):
-            with patch.dict("os.environ", {"BOCHA_API_KEY": "test_key"}):
-                result = await bocha_web_search(
-                    "test query",
-                    api_key="test_key",
-                    max_retries=3,
-                )
-                # 应重试直到成功
-                assert call_count >= 2
+            await bocha_web_search(
+                "test query",
+                api_key="test_key",
+                max_retries=3,
+            )
+            # 应重试直到成功
+            assert call_count >= 2
 
     @pytest.mark.asyncio
     async def test_no_retry_on_400(self):

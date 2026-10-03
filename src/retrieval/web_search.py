@@ -123,10 +123,7 @@ def _safe_url(url: str) -> str:
 def _is_official_domain(domain: str) -> bool:
     value = domain.lower()
     return (
-        value.endswith(".gov.cn")
-        or value.endswith(".gov")
-        or value.endswith(".edu")
-        or value.endswith(".edu.cn")
+        value.endswith((".gov.cn", ".gov", ".edu", ".edu.cn"))
         or "gov" in value
         or "official" in value
     )

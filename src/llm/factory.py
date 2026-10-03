@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
 from .adapter import LLMAdapter, ModelConfig
 
 _ENV_PATH = Path(__file__).resolve().parents[3] / ".env"
@@ -20,7 +21,9 @@ def create_default_llm() -> LLMAdapter:
     """根据环境变量创建默认 LLMAdapter。"""
     api_key = os.getenv("DASHSCOPE_API_KEY", "")
     model = os.getenv("MODEL", "qwen-plus")
-    base_url = os.getenv("BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    base_url = os.getenv(
+        "BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    )
     return LLMAdapter(
         config=ModelConfig(
             model_name=model,

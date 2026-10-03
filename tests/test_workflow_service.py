@@ -3,6 +3,7 @@
 注意：由于 workflow_service.py 使用了多层相对导入（...mult_agents），
 直接 import 会失败。本文件只测试 task_queue 模块。
 """
+
 import asyncio
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
-from backend.service.task_queue import TaskQueue, TaskResult
+from backend.service.task_queue import TaskQueue
 
 
 class TestTaskQueue:

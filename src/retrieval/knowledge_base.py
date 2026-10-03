@@ -7,15 +7,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 # 直接从原模块导入，保持兼容性
 import sys
 from pathlib import Path
+
 _app_root = Path(__file__).resolve().parents[1]
 if str(_app_root) not in sys.path:
     sys.path.insert(0, str(_app_root))
-from app.mult_agents.rag.core import RAGSystem, RAGConfig  # noqa: F401  # 供外部引用
+from app.mult_agents.rag.core import RAGConfig, RAGSystem  # noqa: F401  # 供外部引用
 
 from .hybrid_search import hybrid_search
 
@@ -31,7 +31,7 @@ class KnowledgeBaseClient:
     - 支持混合检索（BM25 + 向量 RRF 融合）
     """
 
-    def __init__(self, rag_system: Optional[RAGSystem] = None):
+    def __init__(self, rag_system: RAGSystem | None = None):
         self._rag_system = rag_system
 
     def search(self, query: str, limit: int = 4) -> list[dict]:
@@ -73,11 +73,14 @@ class KnowledgeBaseClient:
             # 构建 BM25 需要的格式
             bm25_docs = []
             for doc in all_docs:
-                bm25_docs.append({
-                    "doc_id": doc.get("doc_id") or doc.get("source_id", ""),
-                    "content": doc.get("snippet", "") or doc.get("page_content", ""),
-                    **doc,
-                })
+                bm25_docs.append(
+                    {
+                        "doc_id": doc.get("doc_id") or doc.get("source_id", ""),
+                        "content": doc.get("snippet", "")
+                        or doc.get("page_content", ""),
+                        **doc,
+                    }
+                )
 
             # 执行混合检索
             results = hybrid_search(
@@ -91,28 +94,35 @@ class KnowledgeBaseClient:
             # 清理内部字段，返回标准格式
             clean_results = []
             for r in results[:limit]:
-                clean_results.append({
-                    "source_id": r.get("source_id", r.get("doc_id", "")),
-                    "doc_id": r.get("doc_id", ""),
-                    "title": r.get("title", ""),
-                    "snippet": r.get("snippet", r.get("content", ""))[:500],
-                    "source_type": "local",
-                    "rrf_score": r.get("_rrf_score", 0),
-                })
+                clean_results.append(
+                    {
+                        "source_id": r.get("source_id", r.get("doc_id", "")),
+                        "doc_id": r.get("doc_id", ""),
+                        "title": r.get("title", ""),
+                        "snippet": r.get("snippet", r.get("content", ""))[:500],
+                        "source_type": "local",
+                        "rrf_score": r.get("_rrf_score", 0),
+                    }
+                )
             return clean_results
         except Exception as e:
             logger.warning("[hybrid_search] 混合检索失败，降级为普通检索: %s", e)
             return self.search(query, limit)
 
 
-def create_knowledge_base_client(milvus_host: str, milvus_port: int,
-                                  collection_name: str, enable_milvus: bool,
-                                  api_key: str) -> KnowledgeBaseClient:
+def create_knowledge_base_client(
+    milvus_host: str,
+    milvus_port: int,
+    collection_name: str,
+    enable_milvus: bool,
+    api_key: str,
+) -> KnowledgeBaseClient:
     """根据配置创建 KnowledgeBaseClient 实例。
 
     替代原来的 init_rag_system() 全局函数，改为工厂函数返回实例。
     """
     from ..mult_agents.rag.core import RAGConfig
+
     config = RAGConfig(
         milvus_host=milvus_host,
         milvus_port=milvus_port,

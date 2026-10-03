@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware

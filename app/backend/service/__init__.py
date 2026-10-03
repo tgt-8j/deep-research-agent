@@ -7,8 +7,8 @@ the new src/services/workflow.py (dependency-injected, async-native).
 from functools import lru_cache
 
 from ..config import AppSettings
-from .workflow_service_deprecated import WorkflowService  # noqa: F401  # deprecated
 from .task_queue import task_queue
+from .workflow_service_deprecated import WorkflowService  # noqa: F401  # deprecated
 
 
 @lru_cache(maxsize=1)

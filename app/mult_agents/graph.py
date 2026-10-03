@@ -1,22 +1,21 @@
 """工作流编排模块：定义 LangGraph 节点、条件路由与整体执行路径。"""
 import logging
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
 
 from .nodes import (
-    bind_agent,
-    intent_node,
-    direct_answer_node,
-    plan_node,
-    web_search_node,
-    local_rag_node,
-    deep_dive_node,
     analyze_node,
+    bind_agent,
+    deep_dive_node,
+    direct_answer_node,
+    intent_node,
+    local_rag_node,
+    plan_node,
     reflect_node,
+    web_search_node,
     write_node,
 )
 from .state import ResearchState
-
 
 logger = logging.getLogger("mult_agents")
 

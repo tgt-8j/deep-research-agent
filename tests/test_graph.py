@@ -2,13 +2,11 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
-from mult_agents.graph import route_after_intent, should_continue_research, build_app
+from mult_agents.graph import build_app, route_after_intent, should_continue_research
 
 
 class TestRouteAfterIntent:
@@ -63,5 +61,6 @@ class TestBuildApp:
         mock_agents.writer = MagicMock()
         # Use InMemorySaver instead of MagicMock for checkpointer
         from langgraph.checkpoint.memory import InMemorySaver
+
         app = build_app(mock_agents, InMemorySaver())
         assert app is not None

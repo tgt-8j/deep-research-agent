@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.auth import login, LoginRequest, LoginResponse
+from app.auth import LoginRequest, LoginResponse, login
 
 router = APIRouter(prefix="/api/v1/auth", tags=["认证"])
 

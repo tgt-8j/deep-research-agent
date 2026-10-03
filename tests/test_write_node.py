@@ -1,6 +1,5 @@
 """单元测试：write_node 引用校验逻辑。"""
 
-import pytest
 import sys
 from pathlib import Path
 
@@ -66,5 +65,5 @@ class TestCitationValidation:
     def test_all_invalid(self):
         text = "根据 [BAD1] 和 [BAD2] 的研究"
         valid = set()
-        fixed, used = _validate_and_fix_citations(text, valid)
+        _fixed, used = _validate_and_fix_citations(text, valid)
         assert used == []

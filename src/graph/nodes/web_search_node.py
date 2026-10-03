@@ -8,11 +8,11 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from ...context import ResearchRuntimeContext
-from ...prompt.loader import load_prompt
-from ...retrieval import bocha_web_search, _is_official_domain, _filter_records
-from ...state import ResearchState
 from app.metrics import track_node
+
+from ...prompt.loader import load_prompt
+from ...retrieval import _filter_records, _is_official_domain, bocha_web_search
+from ...state import ResearchState
 
 logger = logging.getLogger("research.nodes.web_search")
 
@@ -45,12 +45,14 @@ def _build_queries(state: ResearchState, source_preference: str) -> list[dict]:
             if query_text:
                 queries.append(item)
     if not queries:
-        queries.append({
-            "section_id": "sec_1",
-            "query": state["query"],
-            "source_preference": source_preference,
-            "reason": "fallback",
-        })
+        queries.append(
+            {
+                "section_id": "sec_1",
+                "query": state["query"],
+                "source_preference": source_preference,
+                "reason": "fallback",
+            }
+        )
     return queries[:6]
 
 
@@ -78,7 +80,9 @@ async def web_search_node(
 
     for query_idx, item in enumerate(queries, 1):
         query_text = str(item.get("query", ""))
-        logger.info("[web_search] 执行查询 %d/%d: %s", query_idx, len(queries), query_text[:50])
+        logger.info(
+            "[web_search] 执行查询 %d/%d: %s", query_idx, len(queries), query_text[:50]
+        )
 
         records = await bocha_web_search(query_text, count=4, api_key=api_key)
         records = _assign_source_ids(records, f"{prefix}_{query_idx}")
@@ -87,17 +91,21 @@ async def web_search_node(
             record["search_query"] = query_text
 
         raw_records.extend(records)
-        query_traces.append({
-            "iteration": iteration,
-            "plan_step": query_idx,
-            "query": query_text,
-            "section_id": item.get("section_id", "sec_1"),
-            "reason": item.get("reason", ""),
-            "source_preference": "web",
-            "raw_count": len(records),
-            "raw_records": [{"source_id": r.get("source_id"), "title": r.get("title", "")[:50]}
-                           for r in records[:3]],
-        })
+        query_traces.append(
+            {
+                "iteration": iteration,
+                "plan_step": query_idx,
+                "query": query_text,
+                "section_id": item.get("section_id", "sec_1"),
+                "reason": item.get("reason", ""),
+                "source_preference": "web",
+                "raw_count": len(records),
+                "raw_records": [
+                    {"source_id": r.get("source_id"), "title": r.get("title", "")[:50]}
+                    for r in records[:3]
+                ],
+            }
+        )
 
     # 去重
     seen = set()
@@ -113,9 +121,15 @@ async def web_search_node(
     filtered_records, stats = _filter_records(state["query"], raw_records)
 
     web_retrieval_stats = dict(state.get("web_retrieval_stats", {}))
-    web_retrieval_stats["query_count"] = web_retrieval_stats.get("query_count", 0) + len(queries)
-    web_retrieval_stats["raw_count"] = web_retrieval_stats.get("raw_count", 0) + len(filtered_records)
-    web_retrieval_stats["dropped_count"] = web_retrieval_stats.get("dropped_count", 0) + stats["dropped_irrelevant"]
+    web_retrieval_stats["query_count"] = web_retrieval_stats.get(
+        "query_count", 0
+    ) + len(queries)
+    web_retrieval_stats["raw_count"] = web_retrieval_stats.get("raw_count", 0) + len(
+        filtered_records
+    )
+    web_retrieval_stats["dropped_count"] = (
+        web_retrieval_stats.get("dropped_count", 0) + stats["dropped_irrelevant"]
+    )
 
     logger.info("[web_search] 去重过滤后记录数=%d", len(filtered_records))
 
@@ -155,38 +169,48 @@ async def web_search_node(
             # Fallback: 将原始记录直接转为证据
             evidence = []
             for r in filtered_records:
-                evidence.append({
+                evidence.append(
+                    {
+                        "source_id": r.get("source_id", ""),
+                        "title": r.get("title", ""),
+                        "url": r.get("url", ""),
+                        "snippet": r.get("snippet", "")[:500],
+                        "domain": r.get("domain", ""),
+                        "source_type": "web",
+                        "reliability_hint": "official"
+                        if _is_official_domain(r.get("domain", ""))
+                        else "unknown",
+                        "supports_questions": [],
+                        "notes": "",
+                    }
+                )
+    else:
+        evidence = []
+        for r in filtered_records:
+            evidence.append(
+                {
                     "source_id": r.get("source_id", ""),
                     "title": r.get("title", ""),
                     "url": r.get("url", ""),
                     "snippet": r.get("snippet", "")[:500],
                     "domain": r.get("domain", ""),
                     "source_type": "web",
-                    "reliability_hint": "official" if _is_official_domain(r.get("domain", "")) else "unknown",
+                    "reliability_hint": "official"
+                    if _is_official_domain(r.get("domain", ""))
+                    else "unknown",
                     "supports_questions": [],
                     "notes": "",
-                })
-    else:
-        evidence = []
-        for r in filtered_records:
-            evidence.append({
-                "source_id": r.get("source_id", ""),
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "snippet": r.get("snippet", "")[:500],
-                "domain": r.get("domain", ""),
-                "source_type": "web",
-                "reliability_hint": "official" if _is_official_domain(r.get("domain", "")) else "unknown",
-                "supports_questions": [],
-                "notes": "",
-            })
+                }
+            )
 
     # 限制证据数量
     evidence = evidence[:20]
-    web_retrieval_stats["kept_count"] = web_retrieval_stats.get("kept_count", 0) + len(evidence)
-    web_retrieval_stats["dropped_count"] = web_retrieval_stats.get("dropped_count", 0) + max(
-        len(filtered_records) - len(evidence), 0
+    web_retrieval_stats["kept_count"] = web_retrieval_stats.get("kept_count", 0) + len(
+        evidence
     )
+    web_retrieval_stats["dropped_count"] = web_retrieval_stats.get(
+        "dropped_count", 0
+    ) + max(len(filtered_records) - len(evidence), 0)
 
     if progress:
         progress("web_search", step="网络证据整理完成", status="success")

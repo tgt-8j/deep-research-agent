@@ -13,9 +13,9 @@
 from __future__ import annotations
 
 import sys
-import pytest
 from pathlib import Path
-from types import SimpleNamespace
+
+import pytest
 
 _project_root = Path(__file__).resolve().parents[1]
 if str(_project_root) not in sys.path:
@@ -24,13 +24,13 @@ if str(_project_root) not in sys.path:
 
 def _make_runtime(llm=None, progress_emitter=None, kb_client=None):
     """创建兼容 graph._make_node 的 Mock Runtime。"""
-    runtime = type('Runtime', (), {})()
+    runtime = type("Runtime", (), {})()
     runtime.context = {
-        'llm': llm,
-        'kb_client': kb_client,
-        'progress_emitter': progress_emitter,
-        'retrieval_config': {'bocha_api_key': ''},
-        'cancellation': None,
+        "llm": llm,
+        "kb_client": kb_client,
+        "progress_emitter": progress_emitter,
+        "retrieval_config": {"bocha_api_key": ""},
+        "cancellation": None,
     }
     return runtime
 
@@ -46,6 +46,7 @@ class TestDeepDiveNode:
     @pytest.mark.asyncio
     async def test_empty_evidence(self):
         from src.graph.nodes.deep_dive_node import deep_dive_node
+
         state = {
             "query": "测试问题",
             "sub_questions": [],
@@ -61,6 +62,7 @@ class TestDeepDiveNode:
     @pytest.mark.asyncio
     async def test_with_evidence_fallback(self):
         from src.graph.nodes.deep_dive_node import deep_dive_node
+
         state = {
             "query": "阿司匹林的作用",
             "sub_questions": ["阿司匹林有什么功效？"],
@@ -84,16 +86,27 @@ class TestDeepDiveNode:
     @pytest.mark.asyncio
     async def test_conflict_detection(self):
         from src.graph.nodes.deep_dive_node import deep_dive_node
+
         state = {
             "query": "测试",
             "sub_questions": ["冲突测试"],
             "web_evidence": [
-                {"source_id": "WEB-1", "source_type": "web", "title": "来源A",
-                 "url": "https://a.com", "snippet": "结论：有效",
-                 "domain": "blog.example.com"},
-                {"source_id": "WEB-2", "source_type": "web", "title": "来源B",
-                 "url": "https://b.com", "snippet": "结论：无效且有副作用",
-                 "domain": "news.gov.cn"},
+                {
+                    "source_id": "WEB-1",
+                    "source_type": "web",
+                    "title": "来源A",
+                    "url": "https://a.com",
+                    "snippet": "结论：有效",
+                    "domain": "blog.example.com",
+                },
+                {
+                    "source_id": "WEB-2",
+                    "source_type": "web",
+                    "title": "来源B",
+                    "url": "https://b.com",
+                    "snippet": "结论：无效且有副作用",
+                    "domain": "news.gov.cn",
+                },
             ],
             "local_evidence": [],
         }
@@ -113,6 +126,7 @@ class TestAnalyzeNode:
     @pytest.mark.asyncio
     async def test_empty_evidence_pool(self):
         from src.graph.nodes.analyze_node import analyze_node
+
         state = {"query": "测试", "evidence_pool": []}
         runtime = _make_runtime(llm=None)
         result = await analyze_node(state, runtime)
@@ -122,13 +136,17 @@ class TestAnalyzeNode:
     @pytest.mark.asyncio
     async def test_with_evidence(self):
         from src.graph.nodes.analyze_node import analyze_node
+
         state = {
             "query": "阿司匹林作用",
             "evidence_pool": [
                 {
-                    "source_id": "WEB-1", "source_type": "web",
-                    "title": "阿司匹林说明书", "snippet": "镇痛退热",
-                    "domain": "gov.cn", "reliability_score": 0.88,
+                    "source_id": "WEB-1",
+                    "source_type": "web",
+                    "title": "阿司匹林说明书",
+                    "snippet": "镇痛退热",
+                    "domain": "gov.cn",
+                    "reliability_score": 0.88,
                 }
             ],
             "sub_questions": ["阿司匹林有什么功效？"],
@@ -152,6 +170,7 @@ class TestReflectNode:
     @pytest.mark.asyncio
     async def test_no_gaps(self):
         from src.graph.nodes.reflect_node import reflect_node
+
         state = {
             "query": "测试",
             "missing_gaps": [],
@@ -163,11 +182,13 @@ class TestReflectNode:
         result = await reflect_node(state, runtime)
         # 无信息缺口时，使用 Command 跳至 analyze 节点
         from langgraph.types import Command
+
         assert isinstance(result, Command)
 
     @pytest.mark.asyncio
     async def test_with_gaps(self):
         from src.graph.nodes.reflect_node import reflect_node
+
         state = {
             "query": "阿司匹林安全性",
             "missing_gaps": ["出血风险的具体数据", "与其他药物的相互作用"],
@@ -194,6 +215,7 @@ class TestDirectAnswerNode:
     @pytest.mark.asyncio
     async def test_without_llm(self):
         from src.graph.nodes.direct_answer_node import direct_answer_node
+
         state = {"query": "你好，你是谁？"}
         runtime = _make_runtime(llm=None)
         result = await direct_answer_node(state, runtime)
@@ -203,6 +225,7 @@ class TestDirectAnswerNode:
     @pytest.mark.asyncio
     async def test_with_llm(self):
         from src.graph.nodes.direct_answer_node import direct_answer_node
+
         state = {"query": "北京今天天气怎么样？"}
         # 不传 llm，走 fallback
         runtime = _make_runtime(llm=None)
@@ -223,6 +246,7 @@ class TestWebSearchNode:
     async def test_no_api_key(self):
         """未配置 API Key 时不应报错，返回空结果。"""
         from src.graph.nodes.web_search_node import web_search_node
+
         state = {
             "query": "测试",
             "search_plan": [{"query": "test query", "source_preference": "web"}],
@@ -238,6 +262,7 @@ class TestWebSearchNode:
     async def test_build_queries(self):
         """验证查询构建逻辑。"""
         from src.graph.nodes.web_search_node import _build_queries
+
         state = {
             "search_plan": [
                 {"query": "q1", "source_preference": "web"},
@@ -263,6 +288,7 @@ class TestLocalRAGNode:
     async def test_no_kb_client(self):
         """未配置知识库客户端时不应报错。"""
         from src.graph.nodes.local_rag_node import local_rag_node
+
         state = {
             "query": "测试",
             "search_plan": [],
@@ -276,6 +302,7 @@ class TestLocalRAGNode:
     @pytest.mark.asyncio
     async def test_build_queries_local(self):
         from src.graph.nodes.local_rag_node import _build_queries
+
         state = {
             "search_plan": [
                 {"query": "q1", "source_preference": "hybrid"},
@@ -299,21 +326,28 @@ class TestResearchSchema:
 
     def test_research_request_valid(self):
         from src.api.schemas.research import ResearchRequest
+
         req = ResearchRequest(query="测试问题")
         assert req.query == "测试问题"
         assert req.user_id == "default_user"
 
     def test_research_request_min_length(self):
         from src.api.schemas.research import ResearchRequest
+
         # query has no min_length constraint in schema, empty string is valid
         req = ResearchRequest(query="")
         assert req.query == ""
 
     def test_research_response_model(self):
         from src.api.schemas.research import ResearchResponse
+
         resp = ResearchResponse(
-            query="测试", user_id="u1", thread_id="t1",
-            tenant_id="tenant1", final="报告内容", intent="multiagent",
+            query="测试",
+            user_id="u1",
+            thread_id="t1",
+            tenant_id="tenant1",
+            final="报告内容",
+            intent="multiagent",
         )
         assert resp.intent == "multiagent"
 
@@ -328,20 +362,24 @@ class TestCancellation:
 
     def test_cancellation_default(self):
         from src.persistence.cancellation import WorkflowCancellation
+
         c = WorkflowCancellation()
         assert c.is_requested() is False
 
     def test_cancellation_request(self):
+
         from src.persistence.cancellation import WorkflowCancellation
-        import asyncio
+
         c = WorkflowCancellation()
         c.request()
         assert c.is_requested() is True
 
     @pytest.mark.asyncio
     async def test_cancellation_raise(self):
-        from src.persistence.cancellation import WorkflowCancellation
         import asyncio
+
+        from src.persistence.cancellation import WorkflowCancellation
+
         c = WorkflowCancellation()
         c.request()
         with pytest.raises(asyncio.CancelledError):
@@ -350,7 +388,9 @@ class TestCancellation:
     @pytest.mark.asyncio
     async def test_cancellation_wait(self):
         import asyncio
+
         from src.persistence.cancellation import WorkflowCancellation
+
         c = WorkflowCancellation()
 
         async def requester():
@@ -371,6 +411,7 @@ class TestSessionStore:
 
     def test_create_and_get_session(self, tmp_path):
         from src.persistence.session_store import SessionStore
+
         store = SessionStore(storage_root=str(tmp_path / "sessions"))
         store.create_session("sess_001", "测试问题", "user_001", "tenant1")
         session = store.get_session("sess_001")
@@ -380,6 +421,7 @@ class TestSessionStore:
 
     def test_update_session_status(self, tmp_path):
         from src.persistence.session_store import SessionStore
+
         store = SessionStore(storage_root=str(tmp_path / "sessions"))
         store.create_session("sess_002", "问题", "user_001", "tenant1")
         store.update_session_status("sess_002", "completed", "摘要")
@@ -388,6 +430,7 @@ class TestSessionStore:
 
     def test_list_sessions(self, tmp_path):
         from src.persistence.session_store import SessionStore
+
         store = SessionStore(storage_root=str(tmp_path / "sessions"))
         store.create_session("s1", "问题1", "user_001", "t1")
         store.create_session("s2", "问题2", "user_001", "t1")
@@ -396,11 +439,14 @@ class TestSessionStore:
         assert len(sessions) == 2
 
     def test_checkpoint_save_and_load(self, tmp_path):
-        from src.persistence.session_store import SessionStore, Checkpoint
+        from src.persistence.session_store import Checkpoint, SessionStore
+
         store = SessionStore(storage_root=str(tmp_path / "sessions"))
         cp = Checkpoint(
-            session_key="sess_001", turn_id="turn_1",
-            stage="triage", state_snapshot={"phase": "done"},
+            session_key="sess_001",
+            turn_id="turn_1",
+            stage="triage",
+            state_snapshot={"phase": "done"},
         )
         cp_id = store.save_checkpoint(cp)
         loaded = store.load_checkpoint(cp_id)
@@ -408,12 +454,18 @@ class TestSessionStore:
         assert loaded.stage == "triage"
 
     def test_get_latest_checkpoint(self, tmp_path):
-        from src.persistence.session_store import SessionStore, Checkpoint
+        from src.persistence.session_store import Checkpoint, SessionStore
+
         store = SessionStore(storage_root=str(tmp_path / "sessions"))
-        cp1 = Checkpoint(session_key="s1", turn_id="t1", stage="intake",
-                         state_snapshot={})
-        cp2 = Checkpoint(session_key="s1", turn_id="t2", stage="triage",
-                         state_snapshot={"phase": "done"})
+        cp1 = Checkpoint(
+            session_key="s1", turn_id="t1", stage="intake", state_snapshot={}
+        )
+        cp2 = Checkpoint(
+            session_key="s1",
+            turn_id="t2",
+            stage="triage",
+            state_snapshot={"phase": "done"},
+        )
         store.save_checkpoint(cp1)
         store.save_checkpoint(cp2)
         latest = store.get_latest_checkpoint("s1")
@@ -431,20 +483,24 @@ class TestSSRFProtection:
 
     def test_safe_url_http(self):
         from src.retrieval.web_search import _safe_url
+
         assert _safe_url("https://example.com") == "https://example.com"
 
     def test_safe_url_blocked_host(self):
         from src.retrieval.web_search import _safe_url
+
         with pytest.raises(ValueError):
             _safe_url("http://localhost/api")
 
     def test_safe_url_blocked_ip(self):
         from src.retrieval.web_search import _safe_url
+
         with pytest.raises(ValueError):
             _safe_url("http://192.168.1.1/api")
 
     def test_safe_url_invalid_scheme(self):
         from src.retrieval.web_search import _safe_url
+
         with pytest.raises(ValueError):
             _safe_url("file:///etc/passwd")
 
@@ -459,17 +515,20 @@ class TestPromptLoader:
 
     def test_load_known_prompt(self):
         from src.prompt.loader import load_prompt
+
         prompt = load_prompt("intent_router")
         assert len(prompt) > 0
         assert "IntentRouter" in prompt
 
     def test_load_unknown_prompt(self):
         from src.prompt.loader import load_prompt
+
         prompt = load_prompt("nonexistent_prompt_xyz")
         assert prompt == ""
 
     def test_list_prompts(self):
         from src.prompt.loader import list_prompts
+
         prompts = list_prompts()
         assert "intent_router" in prompts
         assert "write" in prompts

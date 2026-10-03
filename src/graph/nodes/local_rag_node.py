@@ -8,11 +8,11 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
+from app.metrics import track_node
+
 from ...prompt.loader import load_prompt
 from ...retrieval import KnowledgeBaseClient
-from ...retrieval.hybrid_search import _tokenize
 from ...state import ResearchState
-from app.metrics import track_node
 
 logger = logging.getLogger("research.nodes.local_rag")
 
@@ -35,12 +35,14 @@ def _build_queries(state: ResearchState, source_preference: str) -> list[dict]:
             if query_text:
                 queries.append(item)
     if not queries:
-        queries.append({
-            "section_id": "sec_1",
-            "query": state["query"],
-            "source_preference": source_preference,
-            "reason": "fallback",
-        })
+        queries.append(
+            {
+                "section_id": "sec_1",
+                "query": state["query"],
+                "source_preference": source_preference,
+                "reason": "fallback",
+            }
+        )
     return queries[:6]
 
 
@@ -80,11 +82,13 @@ async def local_rag_node(
 
     for query_idx, item in enumerate(queries, 1):
         query_text = str(item.get("query", ""))
-        logger.info("[local_rag] 执行查询 %d/%d: %s", query_idx, len(queries), query_text[:50])
+        logger.info(
+            "[local_rag] 执行查询 %d/%d: %s", query_idx, len(queries), query_text[:50]
+        )
 
         # 先尝试混合检索（BM25 + 向量 RRF 融合）
         hybrid_records = []
-        if hasattr(kb_client, 'hybrid_search'):
+        if hasattr(kb_client, "hybrid_search"):
             try:
                 hybrid_records = kb_client.hybrid_search(query_text, limit=4)
                 stats_extra["hybrid_count"] += len(hybrid_records)
@@ -105,17 +109,21 @@ async def local_rag_node(
             record["search_query"] = query_text
         raw_records.extend(records)
 
-        query_traces.append({
-            "iteration": iteration,
-            "plan_step": query_idx,
-            "query": query_text,
-            "section_id": item.get("section_id", "sec_1"),
-            "reason": item.get("reason", ""),
-            "source_preference": "local",
-            "raw_count": len(records),
-            "raw_records": [{"source_id": r.get("source_id"), "title": r.get("title", "")[:50]}
-                           for r in records[:3]],
-        })
+        query_traces.append(
+            {
+                "iteration": iteration,
+                "plan_step": query_idx,
+                "query": query_text,
+                "section_id": item.get("section_id", "sec_1"),
+                "reason": item.get("reason", ""),
+                "source_preference": "local",
+                "raw_count": len(records),
+                "raw_records": [
+                    {"source_id": r.get("source_id"), "title": r.get("title", "")[:50]}
+                    for r in records[:3]
+                ],
+            }
+        )
 
     # 去重
     seen = set()
@@ -128,8 +136,12 @@ async def local_rag_node(
     raw_records = deduped
 
     local_retrieval_stats = dict(state.get("local_retrieval_stats", {}))
-    local_retrieval_stats["query_count"] = local_retrieval_stats.get("query_count", 0) + len(queries)
-    local_retrieval_stats["raw_count"] = local_retrieval_stats.get("raw_count", 0) + len(raw_records)
+    local_retrieval_stats["query_count"] = local_retrieval_stats.get(
+        "query_count", 0
+    ) + len(queries)
+    local_retrieval_stats["raw_count"] = local_retrieval_stats.get(
+        "raw_count", 0
+    ) + len(raw_records)
     local_retrieval_stats["hybrid_count"] = stats_extra.get("hybrid_count", 0)
     local_retrieval_stats["bm25_count"] = stats_extra.get("bm25_count", 0)
 
@@ -169,7 +181,23 @@ async def local_rag_node(
         except (json.JSONDecodeError, AttributeError):
             evidence = []
             for r in raw_records:
-                evidence.append({
+                evidence.append(
+                    {
+                        "source_id": r.get("source_id", ""),
+                        "doc_id": r.get("doc_id", ""),
+                        "title": r.get("title") or r.get("source_id", ""),
+                        "snippet": r.get("snippet", "")[:500],
+                        "source_type": "local",
+                        "reliability_hint": "internal",
+                        "supports_questions": [],
+                        "notes": "",
+                    }
+                )
+    else:
+        evidence = []
+        for r in raw_records:
+            evidence.append(
+                {
                     "source_id": r.get("source_id", ""),
                     "doc_id": r.get("doc_id", ""),
                     "title": r.get("title") or r.get("source_id", ""),
@@ -178,26 +206,16 @@ async def local_rag_node(
                     "reliability_hint": "internal",
                     "supports_questions": [],
                     "notes": "",
-                })
-    else:
-        evidence = []
-        for r in raw_records:
-            evidence.append({
-                "source_id": r.get("source_id", ""),
-                "doc_id": r.get("doc_id", ""),
-                "title": r.get("title") or r.get("source_id", ""),
-                "snippet": r.get("snippet", "")[:500],
-                "source_type": "local",
-                "reliability_hint": "internal",
-                "supports_questions": [],
-                "notes": "",
-            })
+                }
+            )
 
     evidence = evidence[:20]
-    local_retrieval_stats["kept_count"] = local_retrieval_stats.get("kept_count", 0) + len(evidence)
-    local_retrieval_stats["dropped_count"] = local_retrieval_stats.get("dropped_count", 0) + max(
-        len(raw_records) - len(evidence), 0
-    )
+    local_retrieval_stats["kept_count"] = local_retrieval_stats.get(
+        "kept_count", 0
+    ) + len(evidence)
+    local_retrieval_stats["dropped_count"] = local_retrieval_stats.get(
+        "dropped_count", 0
+    ) + max(len(raw_records) - len(evidence), 0)
 
     if progress:
         progress("local_rag", step="本地证据整理完成", status="success")

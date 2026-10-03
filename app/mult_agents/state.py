@@ -2,8 +2,9 @@
 
 import operator
 from typing import Annotated, List
-from typing_extensions import TypedDict
+
 from langchain_core.messages import BaseMessage
+from typing_extensions import TypedDict
 
 
 class ResearchState(TypedDict):
@@ -11,7 +12,7 @@ class ResearchState(TypedDict):
     user_id: str
     tenant_id: str
     memory_context: str
-    messages: Annotated[List[BaseMessage], operator.add]
+    messages: Annotated[list[BaseMessage], operator.add]
     intent: str
     phase: str
     plan: str
