@@ -9,19 +9,18 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
 from datetime import datetime
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import StreamingResponse
 
-from src.persistence.session_store import SessionStore
+from src.api.app import AppDependencies
+from src.api.schemas.research import ResearchRequest, ResearchResponse
 from src.persistence.cancellation import WorkflowCancellation
+from src.persistence.session_store import SessionStore
 from src.services.workflow import WorkflowService
-from src.api.schemas.research import ResearchRequest, ResearchResponse, StreamResponse
 
 logger = logging.getLogger("research.api")
 
@@ -33,7 +32,7 @@ router = APIRouter(prefix="/api/v1/research", tags=["research"])
 # =====================================================================
 
 
-def get_app_deps(request: Request) -> "AppDependencies":
+def get_app_deps(request: Request) -> AppDependencies:
     """从 app.state 获取应用级依赖容器。
 
     FastAPI 会在每次请求时自动调用此函数，
@@ -42,6 +41,7 @@ def get_app_deps(request: Request) -> "AppDependencies":
     deps = getattr(request.app.state, "deps", None)
     if deps is None:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=500, detail="AppDependencies 未初始化")
     return deps
 
@@ -64,6 +64,7 @@ def _resolve_tenant(request: Request, payload: ResearchRequest) -> str:
     if auth_tenant:
         if payload.tenant_id != auth_tenant:
             from fastapi import HTTPException
+
             raise HTTPException(
                 status_code=403,
                 detail={"error": "tenant_mismatch"},
@@ -213,6 +214,7 @@ async def get_session(
     session = session_store.get_session(session_key)
     if not session:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="会话不存在")
     events = session_store.get_events(session_key, limit=50)
     return {
@@ -240,6 +242,7 @@ async def resume_session(
     checkpoint = session_store.get_latest_checkpoint(session_key)
     if not checkpoint:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="无可用的 Checkpoint")
 
     # 恢复状态并继续执行
