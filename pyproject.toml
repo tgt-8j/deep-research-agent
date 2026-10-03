@@ -30,7 +30,7 @@ build-backend = "setuptools.build_meta"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
-addopts = "-p no:cacheprovider --tb=short"
+addopts = "-p no:cacheprovider --tb=short -p no:capture"
 
 [tool.coverage.run]
 source = ["src"]
