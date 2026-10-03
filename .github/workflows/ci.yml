@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     runs-on: windows-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
@@ -25,7 +25,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]" 2>$null || pip install pytest pytest-asyncio pytest-cov pytest-timeout ruff
+          python -m pip install ruff pytest pytest-asyncio pytest-cov pytest-timeout
+          if exist pyproject.toml (python -m pip install -e ".[dev]" 2>$null)
 
       - name: Lint with Ruff
         run: python -m ruff check src/ tests/ --output-format=concise
