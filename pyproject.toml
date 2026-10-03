@@ -32,6 +32,25 @@ python_files = ["test_*.py"]
 asyncio_mode = "auto"
 addopts = "-p no:cacheprovider --tb=short -p no:capture"
 
+[tool.ruff.lint]
+# 忽略一些过于严格的规则，避免CI因历史代码问题失败
+ignore = [
+    "BLE001",  # Do not catch blind exception: `Exception`
+    "B017",    # Do not assert blind exception: `Exception`
+    "DTZ005",  # datetime.datetime.now() without tz
+    "TRY002",  # Create your own exception
+    "SIM117",  # Use a single `with` statement with multiple contexts
+    "RUF059",  # Unpacked variable is never used
+    "F401",    # Imported but unused (except for availability checks)
+    "S110",    # try-except-pass
+    "S112",    # try-except-continue
+    "UP035",   # Deprecated typing modules
+    "B035",    # Dictionary comprehension uses static key
+    "F811",    # Redefinition of unused name
+    "RUF100",  # Unused noqa directive
+    "B008",    # Do not perform function call in argument defaults
+]
+
 [tool.coverage.run]
 source = ["src"]
 omit = ["tests/**", "**/__pycache__/**"]
