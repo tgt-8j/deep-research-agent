@@ -268,7 +268,7 @@ class LongTermMemory:
             query=query,
             memory_type=memory_type,
             limit=limit,
-            min_similarity=min_similarity,
+            min_similarity=min_similarity if self.use_embedding else 0.0,
         )
 
         if not memories:
@@ -396,6 +396,11 @@ class LongTermMemory:
         Returns:
             匹配的记忆列表，每项包含 content 和 similarity
         """
+        # 当没有 embedding 且用户使用默认阈值时，降低阈值以适应 keyword similarity
+        if not self.use_embedding and min_similarity == 0.3:
+            effective_min_similarity = 0.0
+        else:
+            effective_min_similarity = min_similarity
         if self._conn is None:
             return []
 
@@ -435,7 +440,7 @@ class LongTermMemory:
             else:
                 similarity = _cosine_similarity(query_embedding, stored_embedding)
 
-            if similarity >= min_similarity:
+            if similarity >= effective_min_similarity:
                 results.append(
                     {
                         "id": row["id"],
@@ -522,13 +527,33 @@ class LongTermMemory:
         return _simple_embedding(text)
 
     def _keyword_similarity(self, query: str, content: str) -> float:
-        """简单关键词相似度（无 embedding 时使用）。"""
-        query_words = set(query.lower().split())
-        content_words = set(content.lower().split())
-        if not query_words or not content_words:
+        """简单关键词相似度（无 embedding 时使用）。
+
+        支持中英文混合文本：英文按空格分词，中文按字符分词。
+        """
+        if not query or not content:
             return 0.0
-        intersection = query_words & content_words
-        return len(intersection) / max(len(query_words), len(content_words))
+
+        # 提取英文单词和中文字符
+        def _tokenize(text: str) -> set[str]:
+            tokens = set()
+            # 提取英文单词
+            import re
+            english_words = re.findall(r'[a-zA-Z]+', text)
+            tokens.update(w.lower() for w in english_words)
+            # 提取中文字符
+            chinese_chars = re.findall(r'[一-鿿]', text)
+            tokens.update(chinese_chars)
+            return tokens
+
+        query_tokens = _tokenize(query)
+        content_tokens = _tokenize(content)
+
+        if not query_tokens or not content_tokens:
+            return 0.0
+
+        intersection = query_tokens & content_tokens
+        return len(intersection) / max(len(query_tokens), len(content_tokens))
 
     def close(self) -> None:
         """关闭数据库连接。"""
