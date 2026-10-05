@@ -51,8 +51,9 @@ def _simple_embedding(text: str) -> list[float]:
     # 使用字符 ASCII 值的归一化作为简化 embedding
     if not text:
         return [0.0] * 64
+    # bytes 迭代直接得到 int，不需要 ord()
     chars = text.encode("utf-8")[:64]
-    vec = [ord(c) / 255.0 for c in chars]
+    vec = [c / 255.0 for c in chars]
     while len(vec) < 64:
         vec.append(0.0)
     return vec[:64]
