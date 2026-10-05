@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -349,7 +350,10 @@ class TestWebSearchNode:
 
         state = _make_state(search_plan=[])
         runtime = _make_runtime(llm=None)
-        with patch("src.graph.nodes.web_search_node.bocha_web_search") as mock_search:
+        with patch.object(
+            importlib.import_module("src.graph.nodes.web_search_node"),
+            "bocha_web_search",
+        ) as mock_search:
             mock_search.return_value = []
             result = await web_search_node(state, runtime)
         assert result["web_evidence"] == []
@@ -367,7 +371,10 @@ class TestWebSearchNode:
             "snippet": "关于测试问题的详细内容",
             "domain": "example.com",
         }
-        with patch("src.graph.nodes.web_search_node.bocha_web_search") as mock_search:
+        with patch.object(
+            importlib.import_module("src.graph.nodes.web_search_node"),
+            "bocha_web_search",
+        ) as mock_search:
             mock_search.return_value = [mock_record]
             result = await web_search_node(state, runtime)
         assert len(result["web_evidence"]) >= 1
@@ -401,7 +408,10 @@ class TestWebSearchNode:
             "snippet": "关于测试问题的详细内容",
             "domain": "example.gov.cn",
         }
-        with patch("src.graph.nodes.web_search_node.bocha_web_search") as mock_search:
+        with patch.object(
+            importlib.import_module("src.graph.nodes.web_search_node"),
+            "bocha_web_search",
+        ) as mock_search:
             mock_search.side_effect = [
                 [same_record],
                 [same_record],
@@ -421,7 +431,10 @@ class TestWebSearchNode:
             "snippet": "这是关于测试问题的答案内容",
             "domain": "example.com",
         }
-        with patch("src.graph.nodes.web_search_node.bocha_web_search") as mock_search:
+        with patch.object(
+            importlib.import_module("src.graph.nodes.web_search_node"),
+            "bocha_web_search",
+        ) as mock_search:
             mock_search.return_value = [mock_record]
             result = await web_search_node(state, runtime)
         assert len(result["web_evidence"]) >= 1
@@ -452,7 +465,10 @@ class TestWebSearchNode:
             }
             for i in range(30)
         ]
-        with patch("src.graph.nodes.web_search_node.bocha_web_search") as mock_search:
+        with patch.object(
+            importlib.import_module("src.graph.nodes.web_search_node"),
+            "bocha_web_search",
+        ) as mock_search:
             mock_search.return_value = big_records
             result = await web_search_node(state, runtime)
         assert len(result["web_evidence"]) <= 20
@@ -481,7 +497,10 @@ class TestWebSearchNode:
             ],
         )
         runtime = _make_runtime(llm=None)
-        with patch("src.graph.nodes.web_search_node.bocha_web_search") as mock_search:
+        with patch.object(
+            importlib.import_module("src.graph.nodes.web_search_node"),
+            "bocha_web_search",
+        ) as mock_search:
             mock_search.return_value = []
             await web_search_node(state, runtime)
             assert mock_search.call_args_list[0][0][0] == "gap_query"
