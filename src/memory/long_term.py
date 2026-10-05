@@ -539,10 +539,11 @@ class LongTermMemory:
             tokens = set()
             # 提取英文单词
             import re
-            english_words = re.findall(r'[a-zA-Z]+', text)
+
+            english_words = re.findall(r"[a-zA-Z]+", text)
             tokens.update(w.lower() for w in english_words)
             # 提取中文字符
-            chinese_chars = re.findall(r'[一-鿿]', text)
+            chinese_chars = re.findall(r"[一-鿿]", text)
             tokens.update(chinese_chars)
             return tokens
 
