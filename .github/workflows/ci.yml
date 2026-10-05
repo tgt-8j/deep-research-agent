@@ -27,6 +27,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install ruff==0.16.10 pytest pytest-asyncio pytest-cov
+          python -m pip cache purge
           pip install -e .
 
       - name: Verify ruff installation
