@@ -47,6 +47,7 @@ logger = logging.getLogger("mult_agents")
 
 MEMORY_MANAGER: MemoryManager | None = None
 CHECKPOINTER_CONTEXT = None
+CHECKPOINT_CTX = None
 
 from .common import colorize
 
@@ -282,66 +283,78 @@ def build_memory_manager(config: AppConfig) -> MemoryManager | None:
 
 
 def build_checkpointer(config: AppConfig):
-    global CHECKPOINTER_CONTEXT
+    """Build checkpointer with fallback chain: PostgreSQL -> Redis -> InMemorySaver."""
     backend = config.checkpointer_backend
+
+    # Tier 1: PostgreSQL
     if backend in {"postgres", "auto"} and config.enable_memory and config.postgres_dsn:
         postgres_saver = None
-        postgres_import_error = ""
-        try:
-            module = importlib.import_module("langgraph.checkpoint.postgres")
-            postgres_saver = getattr(module, "PostgresSaver", None)
-        except Exception as exc:
-            postgres_import_error = str(exc)
-        if postgres_saver is None:
+        postgres_err = ""
+        for mod_name in ("langgraph.checkpoint.postgres", "langgraph_checkpoint_postgres"):
             try:
-                module = importlib.import_module("langgraph_checkpoint_postgres")
-                postgres_saver = getattr(module, "PostgresSaver", None)
+                mod = importlib.import_module(mod_name)
+                postgres_saver = getattr(mod, "PostgresSaver", None)
+                if postgres_saver:
+                    break
             except Exception as exc:
-                postgres_import_error = postgres_import_error or str(exc)
+                postgres_err = str(exc)
         if postgres_saver is None:
-            message = (
-                "PostgreSQL checkpointer 模块不可用。请安装: pip install langgraph-checkpoint-postgres "
-                f"| import_error={postgres_import_error or 'unknown'}"
+            msg = (
+                "PostgreSQL checkpointer module unavailable. "
+                f"pip install langgraph-checkpoint-postgres | error={postgres_err or 'unknown'}"
             )
-            if backend == "postgres":
-                logger.warning("%s %s", colorize("[memory]", "yellow"), message)
-            else:
-                logger.info("%s %s", colorize("[memory]", "cyan"), message)
+            tag = colorize("[memory]", "yellow" if backend == "postgres" else "cyan")
+            logger.warning("%s %s", tag, msg)
         else:
             try:
-                CHECKPOINTER_CONTEXT = postgres_saver.from_conn_string(config.postgres_dsn)
-                checkpointer = CHECKPOINTER_CONTEXT.__enter__()
+                ctx = postgres_saver.from_conn_string(config.postgres_dsn)
+                checkpointer = ctx.__enter__()
                 checkpointer.setup()
-                logger.info("%s 使用 PostgreSQL checkpointer", colorize("[memory]", "green"))
+                logger.info("%s Using PostgreSQL checkpointer", colorize("[memory]", "green"))
                 return checkpointer
             except Exception as exc:
-                logger.warning("%s PostgreSQL checkpointer 初始化失败: %s", colorize("[memory]", "yellow"), exc)
-    if backend in {"redis", "auto"} and config.enable_memory and config.redis_url:
-        from langgraph.checkpoint.redis import RedisSaver
+                logger.warning("%s PostgreSQL checkpointer init failed, falling back: %s",
+                               colorize("[memory]", "yellow"), exc)
 
-        candidate_urls = [config.redis_url]
-        if "redis://root:" in config.redis_url:
-            candidate_urls.append(config.redis_url.replace("redis://root:", "redis://:"))
-        last_exc = None
-        for url in candidate_urls:
-            try:
-                CHECKPOINTER_CONTEXT = RedisSaver.from_conn_string(url)
-                checkpointer = CHECKPOINTER_CONTEXT.__enter__()
-                checkpointer.setup()
-                logger.info("%s 使用 Redis checkpointer", colorize("[memory]", "green"))
-                return checkpointer
-            except Exception as exc:
-                last_exc = exc
-        if last_exc and "FT._LIST" in str(last_exc):
-            logger.warning(
-                "%s Redis checkpointer 依赖 RediSearch(FT._LIST)。当前 Redis 非 Redis Stack，已降级。",
-                colorize("[memory]", "yellow"),
-            )
+    # Tier 2: Redis
+    if backend in {"redis", "auto"} and config.enable_memory and config.redis_url:
+        try:
+            from langgraph.checkpoint.redis import RedisSaver
+        except ImportError:
+            logger.warning("%s Redis checkpointer module not installed, skipping", colorize("[memory]", "yellow"))
         else:
-            logger.warning("%s Redis checkpointer 初始化失败，降级内存: %s", colorize("[memory]", "yellow"), last_exc)
+            urls = [config.redis_url]
+            if "redis://root:" in config.redis_url:
+                urls.append(config.redis_url.replace("redis://root:", "redis://:"))
+            last_exc = None
+            for url in urls:
+                try:
+                    ctx = RedisSaver.from_conn_string(url)
+                    checkpointer = ctx.__enter__()
+                    checkpointer.setup()
+                    logger.info("%s Using Redis checkpointer", colorize("[memory]", "green"))
+                    return checkpointer
+                except Exception as exc:
+                    last_exc = exc
+                    if "FT._LIST" in str(exc):
+                        logger.warning(
+                            "%s Redis checkpointer requires RediSearch (FT._LIST). "
+                            "Current Redis is not Redis Stack, falling back.",
+                            colorize("[memory]", "yellow"),
+                        )
+                        break
+            if last_exc and "FT._LIST" not in str(last_exc):
+                logger.warning("%s Redis checkpointer init failed, falling back to memory: %s",
+                               colorize("[memory]", "yellow"), last_exc)
+
+    # Tier 3: InMemorySaver (always available)
     if backend == "memory":
-        logger.info("%s 使用内存 checkpointer", colorize("[memory]", "green"))
+        logger.info("%s Using InMemory checkpointer", colorize("[memory]", "green"))
+    elif backend == "auto":
+        logger.info("%s No persistent store configured, using InMemory checkpointer",
+                    colorize("[memory]", "cyan"))
     return InMemorySaver()
+
 
 
 def parse_cli_args() -> argparse.Namespace:
@@ -493,7 +506,6 @@ def read_user_input(prompt: str = "你: ") -> str:
 
 def main():
     global MEMORY_MANAGER
-    global CHECKPOINTER_CONTEXT
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(message)s",
@@ -503,6 +515,8 @@ def main():
     MEMORY_MANAGER = build_memory_manager(config)
     agents = build_agents(config.model, config.api_key, config)
     checkpointer = build_checkpointer(config)
+    global CHECKPOINT_CTX
+    CHECKPOINT_CTX = checkpointer
     app = build_workflow_app(agents, checkpointer)
     if args.once_query:
         response = run_query(app, config, args.once_query)
@@ -527,9 +541,12 @@ def main():
             response = run_query(app, config, query)
             safe_response = response.encode('utf-8', errors='replace').decode('utf-8')
             print(f"\nAI: {safe_response}\n")
-    if CHECKPOINTER_CONTEXT:
-        CHECKPOINTER_CONTEXT.__exit__(None, None, None)
-        CHECKPOINTER_CONTEXT = None
+    if CHECKPOINT_CTX:
+        try:
+            CHECKPOINT_CTX.__exit__(None, None, None)
+        except Exception:
+            pass
+        CHECKPOINT_CTX = None
 
 
 if __name__ == "__main__":

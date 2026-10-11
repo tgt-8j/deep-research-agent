@@ -11,11 +11,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 logger = logging.getLogger("backend.task_queue")
+_TASKS_DIR = Path(__file__).resolve().parents[3] / ".task_queue_data"
+
 
 
 @dataclass
@@ -30,6 +34,34 @@ class TaskQueue:
     def __init__(self, max_concurrent: int = 5):
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._results: dict[str, TaskResult] = {}
+        self._persist_path = _TASKS_DIR / "tasks.json"
+        self._load_persisted()
+
+    def _load_persisted(self) -> None:
+        if not self._persist_path.exists():
+            return
+        try:
+            with self._persist_path.open("r", encoding="utf-8") as f:
+                items = json.load(f)
+            for tid, item in items.items():
+                if item["status"] in {"completed", "failed"}:
+                    self._results[tid] = TaskResult(**item)
+            logger.info("restored %d persisted tasks", len(self._results))
+        except Exception as exc:
+            logger.warning("failed to load task persistence: %s", exc)
+
+    def _save_persisted(self) -> None:
+        try:
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            snapshot = {
+                tid: {"task_id": r.task_id, "status": r.status, "result": r.result, "error": r.error}
+                for tid, r in self._results.items()
+                if r.status in {"completed", "failed"}
+            }
+            with self._persist_path.open("w", encoding="utf-8") as f:
+                json.dump(snapshot, f, ensure_ascii=False, default=str)
+        except Exception as exc:
+            logger.warning("failed to save task persistence: %s", exc)
 
     async def submit(self, task_id: str, coro_factory: Callable[[], Any]) -> TaskResult:
         """提交异步任务。
@@ -39,7 +71,8 @@ class TaskQueue:
             coro_factory: 返回 coroutine 的工厂函数（延迟创建）
         """
         if task_id in self._results:
-            raise ValueError(f"任务 {task_id} 已存在")
+            logger.info("task %s already exists, returning existing result", task_id)
+            return self._results[task_id]
 
         self._results[task_id] = TaskResult(task_id=task_id, status="pending")
 
@@ -50,11 +83,13 @@ class TaskQueue:
                 self._results[task_id] = TaskResult(
                     task_id=task_id, status="completed", result=result
                 )
+                self._save_persisted()
             except Exception as exc:
                 logger.exception("任务 %s 执行失败", task_id)
                 self._results[task_id] = TaskResult(
                     task_id=task_id, status="failed", error=str(exc)
                 )
+                self._save_persisted()
 
         # 立即用 semaphore 包装
         async def _guarded_run():

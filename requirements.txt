@@ -107,5 +107,3 @@ wheel==0.45.1
 xxhash==3.6.0
 yarl==1.22.0
 zstandard==0.25.0
-PyJWT>=2.8.0
-prometheus-client>=0.20.0
