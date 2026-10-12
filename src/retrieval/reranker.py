@@ -114,7 +114,7 @@ class Reranker:
             筛选后的证据列表，按相似度降序
         """
         if not evidence_items:
-            return []
+            return [], None
 
         # 准备文本用于 embedding
         texts = [
@@ -128,7 +128,7 @@ class Reranker:
             doc_vectors = self._embed_text(texts)
         except Exception as e:
             logger.warning("[coarse_filter] Embedding 失败，跳过粗筛: %s", e)
-            return evidence_items[:k]
+            return evidence_items[:k], None
 
         # 计算相似度并排序
         scored_items = []
@@ -140,13 +140,14 @@ class Reranker:
 
         # 按相似度降序排序，取 Top-K
         scored_items.sort(key=lambda x: x["_rerank_coarse_score"], reverse=True)
-        return scored_items[:k]
+        return scored_items[:k], query_vec
 
     def fine_rank(
         self,
         query: str,
         evidence_items: list[dict],
         k: int = 10,
+        query_vec: list[float] | None = None,
     ) -> list[dict]:
         """精排：用 Embedding 重排序对候选进行精细打分。
 
@@ -170,8 +171,13 @@ class Reranker:
             for item in evidence_items
         ]
 
+        if query_vec is None:
+            try:
+                query_vec = self._embed_text([query])[0]
+            except Exception as e:
+                logger.warning("[fine_rank] Embedding 失败，使用原始顺序: %s", e)
+                return evidence_items[:k]
         try:
-            query_vec = self._embed_text([query])[0]
             doc_vectors = self._embed_text(texts)
         except Exception as e:
             logger.warning("[fine_rank] Embedding 失败，使用原始顺序: %s", e)
@@ -230,7 +236,7 @@ class Reranker:
 
         # 第一步：粗筛
         logger.info("[rerank] 开始粗筛，候选数=%d, 目标数=%d", total_before, coarse_k)
-        coarse_results = self.coarse_filter(query, evidence_items, k=coarse_k)
+        coarse_results, query_vec = self.coarse_filter(query, evidence_items, k=coarse_k)
         stats["coarse_filtered"] = len(coarse_results)
 
         if len(coarse_results) <= fine_k:
@@ -248,7 +254,7 @@ class Reranker:
         logger.info(
             "[rerank] 开始精排，候选数=%d, 目标数=%d", len(coarse_results), fine_k
         )
-        fine_results = self.fine_rank(query, coarse_results, k=fine_k)
+        fine_results = self.fine_rank(query, coarse_results, k=fine_k, query_vec=query_vec)
         stats["method"] = "coarse+fine"
         stats["fine_ranked"] = len(fine_results)
 
