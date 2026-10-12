@@ -85,21 +85,22 @@ class TestRerankerInit:
 
 class TestCoarseFilter:
     def test_empty_input(self):
-        """空输入应返回空列表。"""
+        """空输入应返回 (空列表, None)。"""
         reranker = Reranker(use_embedding_rerank=False)
-        result = reranker.coarse_filter("query", [], k=10)
+        result, query_vec = reranker.coarse_filter("query", [], k=10)
         assert result == []
+        assert query_vec is None
 
     def test_fewer_than_k(self, sample_evidence):
         """候选数少于 k 时应返回全部。"""
         reranker = Reranker(use_embedding_rerank=False)
-        result = reranker.coarse_filter("LangGraph", sample_evidence, k=10)
+        result, _ = reranker.coarse_filter("LangGraph", sample_evidence, k=10)
         assert len(result) == len(sample_evidence)
 
     def test_returns_dict_list(self, sample_evidence):
         """结果应为 dict 列表。"""
         reranker = Reranker(use_embedding_rerank=False)
-        result = reranker.coarse_filter("LangGraph", sample_evidence, k=3)
+        result, _ = reranker.coarse_filter("LangGraph", sample_evidence, k=3)
         assert isinstance(result, list)
         if result:
             assert isinstance(result[0], dict)

@@ -22,24 +22,28 @@ class TestTaskQueue:
     async def test_submit_and_get_status(self):
         queue = TaskQueue(max_concurrent=2)
         call_count = 0
+        # 用动态 task_id 避免被持久化数据（.task_queue_data/tasks.json）干扰
+        task_id = "test_submit_unique"
 
         async def my_task():
             nonlocal call_count
             call_count += 1
             return "result"
 
-        result = await queue.submit("task_1", my_task)
-        assert result.task_id == "task_1"
-        assert result.status == "pending"  # 立即返回 pending，后台执行
+        result = await queue.submit(task_id, my_task)
+        assert result.task_id == task_id
+        # submit 返回的是内部 TaskResult 引用；快速任务可能在断言前已完成，
+        # 因此只验证状态是 pending 或 completed（二者皆可）
+        assert result.status in ("pending", "completed")
 
         # 等待任务完成
         for _ in range(50):
             await asyncio.sleep(0.01)
-            r = queue.get_status("task_1")
+            r = queue.get_status(task_id)
             if r and r.status == "completed":
                 break
 
-        final = queue.get_status("task_1")
+        final = queue.get_status(task_id)
         assert final is not None
         assert final.status == "completed"
         assert final.result == "result"
@@ -48,33 +52,36 @@ class TestTaskQueue:
     @pytest.mark.asyncio
     async def test_submit_failed_task(self):
         queue = TaskQueue(max_concurrent=2)
+        task_id = "test_fail_unique"
 
         async def failing_task():
             raise ValueError("task failed")
 
-        await queue.submit("task_fail", failing_task)
+        await queue.submit(task_id, failing_task)
 
         for _ in range(50):
             await asyncio.sleep(0.01)
-            r = queue.get_status("task_fail")
+            r = queue.get_status(task_id)
             if r and r.status in {"completed", "failed"}:
                 break
 
-        final = queue.get_status("task_fail")
+        final = queue.get_status(task_id)
         assert final is not None
         assert final.status == "failed"
         assert "task failed" in final.error
 
     @pytest.mark.asyncio
-    async def test_duplicate_submit_raises(self):
+    async def test_duplicate_submit_returns_existing(self):
         queue = TaskQueue(max_concurrent=2)
+        task_id = "test_dup_unique"
 
         async def simple_task():
             return "ok"
 
-        await queue.submit("task_dup", simple_task)
-        with pytest.raises(ValueError, match="已存在"):
-            await queue.submit("task_dup", simple_task)
+        first = await queue.submit(task_id, simple_task)
+        # 重复提交同一 task_id 应直接返回已有结果，而非抛异常
+        second = await queue.submit(task_id, simple_task)
+        assert second is first
 
     def test_get_nonexistent_task(self):
         queue = TaskQueue()
