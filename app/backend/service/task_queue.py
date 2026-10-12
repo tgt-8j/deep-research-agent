@@ -31,10 +31,10 @@ class TaskResult:
 
 
 class TaskQueue:
-    def __init__(self, max_concurrent: int = 5):
+    def __init__(self, max_concurrent: int = 5, persist_path: Path | None = None):
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._results: dict[str, TaskResult] = {}
-        self._persist_path = _TASKS_DIR / "tasks.json"
+        self._persist_path = persist_path if persist_path is not None else _TASKS_DIR / "tasks.json"
         self._load_persisted()
 
     def _load_persisted(self) -> None:

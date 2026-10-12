@@ -6,6 +6,7 @@
 
 import asyncio
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -15,15 +16,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 from backend.service.task_queue import TaskQueue
 
 
+def _make_queue(max_concurrent: int = 5) -> TaskQueue:
+    """创建使用临时持久化目录的 TaskQueue，避免测试间数据污染。"""
+    tmp_dir = Path(tempfile.mkdtemp())
+    return TaskQueue(max_concurrent=max_concurrent, persist_path=tmp_dir / "tasks.json")
+
+
 class TestTaskQueue:
     """异步任务队列测试。"""
 
     @pytest.mark.asyncio
     async def test_submit_and_get_status(self):
-        queue = TaskQueue(max_concurrent=2)
+        queue = _make_queue(max_concurrent=2)
         call_count = 0
-        # 用动态 task_id 避免被持久化数据（.task_queue_data/tasks.json）干扰
-        task_id = "test_submit_unique"
+        task_id = "task_1"
 
         async def my_task():
             nonlocal call_count
@@ -51,8 +57,8 @@ class TestTaskQueue:
 
     @pytest.mark.asyncio
     async def test_submit_failed_task(self):
-        queue = TaskQueue(max_concurrent=2)
-        task_id = "test_fail_unique"
+        queue = _make_queue(max_concurrent=2)
+        task_id = "task_fail"
 
         async def failing_task():
             raise ValueError("task failed")
@@ -72,8 +78,8 @@ class TestTaskQueue:
 
     @pytest.mark.asyncio
     async def test_duplicate_submit_returns_existing(self):
-        queue = TaskQueue(max_concurrent=2)
-        task_id = "test_dup_unique"
+        queue = _make_queue(max_concurrent=2)
+        task_id = "task_dup"
 
         async def simple_task():
             return "ok"
@@ -84,17 +90,17 @@ class TestTaskQueue:
         assert second is first
 
     def test_get_nonexistent_task(self):
-        queue = TaskQueue()
+        queue = _make_queue()
         assert queue.get_status("nonexistent") is None
 
     def test_list_active_empty(self):
-        queue = TaskQueue()
+        queue = _make_queue()
         assert queue.list_active() == []
 
     @pytest.mark.asyncio
     async def test_concurrency_limit(self):
         """验证并发限制生效。"""
-        queue = TaskQueue(max_concurrent=2)
+        queue = _make_queue(max_concurrent=2)
         running = 0
         max_running = 0
         import asyncio
