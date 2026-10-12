@@ -8,18 +8,18 @@
 注意：此队列仅在当前进程内有效，不适合跨进程分发。
       生产环境可替换为 Celery / ARQ / Dramatiq。
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 logger = logging.getLogger("backend.task_queue")
 _TASKS_DIR = Path(__file__).resolve().parents[3] / ".task_queue_data"
-
 
 
 @dataclass
@@ -34,7 +34,9 @@ class TaskQueue:
     def __init__(self, max_concurrent: int = 5, persist_path: Path | None = None):
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._results: dict[str, TaskResult] = {}
-        self._persist_path = persist_path if persist_path is not None else _TASKS_DIR / "tasks.json"
+        self._persist_path = (
+            persist_path if persist_path is not None else _TASKS_DIR / "tasks.json"
+        )
         self._load_persisted()
 
     def _load_persisted(self) -> None:
@@ -54,7 +56,12 @@ class TaskQueue:
         try:
             self._persist_path.parent.mkdir(parents=True, exist_ok=True)
             snapshot = {
-                tid: {"task_id": r.task_id, "status": r.status, "result": r.result, "error": r.error}
+                tid: {
+                    "task_id": r.task_id,
+                    "status": r.status,
+                    "result": r.result,
+                    "error": r.error,
+                }
                 for tid, r in self._results.items()
                 if r.status in {"completed", "failed"}
             }
@@ -106,7 +113,8 @@ class TaskQueue:
     def list_active(self) -> list[str]:
         """返回所有正在执行的任务 ID。"""
         return [
-            tid for tid, r in self._results.items()
+            tid
+            for tid, r in self._results.items()
             if r.status in {"pending", "running"}
         ]
 

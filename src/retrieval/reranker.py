@@ -236,7 +236,9 @@ class Reranker:
 
         # 第一步：粗筛
         logger.info("[rerank] 开始粗筛，候选数=%d, 目标数=%d", total_before, coarse_k)
-        coarse_results, query_vec = self.coarse_filter(query, evidence_items, k=coarse_k)
+        coarse_results, query_vec = self.coarse_filter(
+            query, evidence_items, k=coarse_k
+        )
         stats["coarse_filtered"] = len(coarse_results)
 
         if len(coarse_results) <= fine_k:
@@ -254,7 +256,9 @@ class Reranker:
         logger.info(
             "[rerank] 开始精排，候选数=%d, 目标数=%d", len(coarse_results), fine_k
         )
-        fine_results = self.fine_rank(query, coarse_results, k=fine_k, query_vec=query_vec)
+        fine_results = self.fine_rank(
+            query, coarse_results, k=fine_k, query_vec=query_vec
+        )
         stats["method"] = "coarse+fine"
         stats["fine_ranked"] = len(fine_results)
 
