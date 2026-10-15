@@ -53,8 +53,9 @@ def _simple_embedding(text: str) -> list[float]:
         return [0.0] * 64
     # 提取中文二元大gram
     chinese_chars = re.findall(r"[一-鿿]", text)
-    bigrams = [chinese_chars[i] + chinese_chars[i + 1]
-               for i in range(len(chinese_chars) - 1)]
+    bigrams = [
+        chinese_chars[i] + chinese_chars[i + 1] for i in range(len(chinese_chars) - 1)
+    ]
     # 提取英文单词（2字符以上）
     words = re.findall(r"[a-zA-Z0-9_]{2,}", text)
     tokens = bigrams + words

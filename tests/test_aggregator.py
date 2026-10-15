@@ -1,4 +1,5 @@
-﻿"""StreamAggregator 和 NodeReporter 单元测试。"""
+"""StreamAggregator 和 NodeReporter 单元测试。"""
+
 from __future__ import annotations
 
 import sys
@@ -8,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pytest
 
-from src.presentation.aggregator import StreamAggregator, NodeReporter
+from src.presentation.aggregator import NodeReporter, StreamAggregator
 
 
 class TestStreamAggregator:
@@ -58,7 +59,9 @@ class TestStreamAggregator:
 
     def test_tool_call_event(self):
         agg = StreamAggregator()
-        agg.apply({"type": "tool_call", "tool": {"name": "search", "args": {"q": "test"}}})
+        agg.apply(
+            {"type": "tool_call", "tool": {"name": "search", "args": {"q": "test"}}}
+        )
         assistant = agg.messages[-1]
         assert len(assistant.tool_calls) == 1
         assert assistant.tool_calls[0]["name"] == "search"

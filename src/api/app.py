@@ -18,7 +18,7 @@ from ..config import AppConfig
 from ..core.exceptions import register_exception_handlers
 from ..middleware.rate_limit import rate_limit_middleware
 from ..middleware.tracing import tracing_middleware
-from ..persistence import SessionStore
+from ..persistence import SessionStore, WorkflowCancellation
 from ..services.workflow import WorkflowService
 
 logger = logging.getLogger("research.app")
@@ -115,12 +115,15 @@ def create_app(
 
     if os.getenv("TESTING") != "1":
         from starlette.middleware.base import BaseHTTPMiddleware
+
         class _TracingMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
                 return await tracing_middleware(request, call_next)
+
         class _RateLimitMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
                 return await rate_limit_middleware(request, call_next)
+
         app.add_middleware(_TracingMiddleware)
         app.add_middleware(_RateLimitMiddleware)
     app.add_middleware(

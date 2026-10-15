@@ -1,9 +1,10 @@
-﻿"""pytest configuration: redirect tmp_path to a project-local directory.
+"""pytest configuration: redirect tmp_path to a project-local directory.
 
 On Windows, pytest default to %TEMP%\\pytest-of-<user>, which can fail
 with PermissionError if that directory was created by another process
 (e.g. Codex sandbox). Redirecting to tests/_tmp avoids the issue.
 """
+
 from __future__ import annotations
 
 import os

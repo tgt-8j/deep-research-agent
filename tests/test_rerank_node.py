@@ -1,4 +1,5 @@
-﻿"""rerank_node 单元测试。"""
+"""rerank_node 单元测试。"""
+
 from __future__ import annotations
 
 import sys
@@ -15,16 +16,40 @@ from src.graph.nodes.rerank_node import _rrf_fuse_two_sources, rerank_node
 @pytest.fixture
 def web_evidence():
     return [
-        {"url": "https://a.com", "title": "A", "snippet": "s1", "source_id": "W1", "source_type": "web"},
-        {"url": "https://b.com", "title": "B", "snippet": "s2", "source_id": "W2", "source_type": "web"},
+        {
+            "url": "https://a.com",
+            "title": "A",
+            "snippet": "s1",
+            "source_id": "W1",
+            "source_type": "web",
+        },
+        {
+            "url": "https://b.com",
+            "title": "B",
+            "snippet": "s2",
+            "source_id": "W2",
+            "source_type": "web",
+        },
     ]
 
 
 @pytest.fixture
 def local_evidence():
     return [
-        {"doc_id": "d1", "title": "C", "snippet": "s3", "source_id": "L1", "source_type": "local"},
-        {"doc_id": "d2", "title": "D", "snippet": "s4", "source_id": "L2", "source_type": "local"},
+        {
+            "doc_id": "d1",
+            "title": "C",
+            "snippet": "s3",
+            "source_id": "L1",
+            "source_type": "local",
+        },
+        {
+            "doc_id": "d2",
+            "title": "D",
+            "snippet": "s4",
+            "source_id": "L2",
+            "source_type": "local",
+        },
     ]
 
 
@@ -50,7 +75,15 @@ class TestRRFFuseTwoSources:
     def test_shared_url_deduplicated(self):
         shared_url = "https://shared.com"
         web = [{"url": shared_url, "title": "S", "snippet": "s", "source_id": "W1"}]
-        local = [{"doc_id": "d1", "url": shared_url, "title": "S", "snippet": "s", "source_id": "L1"}]
+        local = [
+            {
+                "doc_id": "d1",
+                "url": shared_url,
+                "title": "S",
+                "snippet": "s",
+                "source_id": "L1",
+            }
+        ]
         result = _rrf_fuse_two_sources(web, local)
         assert len(result) == 1
         assert result[0].get("_rrf_fuse_score", 0) > 0
@@ -119,8 +152,24 @@ class TestRerankNodeWithEvidence:
     @pytest.mark.asyncio
     async def test_reranks_and_returns_pool(self):
         state = _make_state(
-            web_ev=[{"url": "https://a.com", "title": "A", "snippet": "s", "source_id": "W1", "source_type": "web"}],
-            local_ev=[{"doc_id": "d1", "title": "B", "snippet": "s", "source_id": "L1", "source_type": "local"}],
+            web_ev=[
+                {
+                    "url": "https://a.com",
+                    "title": "A",
+                    "snippet": "s",
+                    "source_id": "W1",
+                    "source_type": "web",
+                }
+            ],
+            local_ev=[
+                {
+                    "doc_id": "d1",
+                    "title": "B",
+                    "snippet": "s",
+                    "source_id": "L1",
+                    "source_type": "local",
+                }
+            ],
         )
         result = await rerank_node(state, _make_runtime())
         assert len(result["evidence_pool"]) > 0
@@ -129,7 +178,15 @@ class TestRerankNodeWithEvidence:
     @pytest.mark.asyncio
     async def test_internal_keys_cleaned(self):
         state = _make_state(
-            web_ev=[{"url": "https://a.com", "title": "A", "snippet": "s", "source_id": "W1", "source_type": "web"}],
+            web_ev=[
+                {
+                    "url": "https://a.com",
+                    "title": "A",
+                    "snippet": "s",
+                    "source_id": "W1",
+                    "source_type": "web",
+                }
+            ],
         )
         result = await rerank_node(state, _make_runtime())
         for item in result["evidence_pool"]:
@@ -140,7 +197,14 @@ class TestRerankNodeWithEvidence:
     @pytest.mark.asyncio
     async def test_source_type_default_added(self):
         state = _make_state(
-            web_ev=[{"url": "https://a.com", "title": "A", "snippet": "s", "source_id": "W1"}],
+            web_ev=[
+                {
+                    "url": "https://a.com",
+                    "title": "A",
+                    "snippet": "s",
+                    "source_id": "W1",
+                }
+            ],
         )
         result = await rerank_node(state, _make_runtime())
         for item in result["evidence_pool"]:
@@ -149,9 +213,19 @@ class TestRerankNodeWithEvidence:
     @pytest.mark.asyncio
     async def test_reranker_import_failure_fallback(self):
         state = _make_state(
-            web_ev=[{"url": "https://a.com", "title": "A", "snippet": "s", "source_id": "W1", "source_type": "web"}],
+            web_ev=[
+                {
+                    "url": "https://a.com",
+                    "title": "A",
+                    "snippet": "s",
+                    "source_id": "W1",
+                    "source_type": "web",
+                }
+            ],
         )
-        with patch("src.retrieval.reranker.Reranker", side_effect=ImportError("no module")):
+        with patch(
+            "src.retrieval.reranker.Reranker", side_effect=ImportError("no module")
+        ):
             result = await rerank_node(state, _make_runtime())
         assert result["rerank_stats"]["method"] in ("rrf_fusion", "skipped_no_reranker")
 
@@ -159,7 +233,15 @@ class TestRerankNodeWithEvidence:
     async def test_reranker_runtime_error_fallback(self):
         """Reranker.rerank() 抛异常时，降级到 RRF 融合结果（lines 177-180）。"""
         state = _make_state(
-            web_ev=[{"url": "https://a.com", "title": "A", "snippet": "s", "source_id": "W1", "source_type": "web"}],
+            web_ev=[
+                {
+                    "url": "https://a.com",
+                    "title": "A",
+                    "snippet": "s",
+                    "source_id": "W1",
+                    "source_type": "web",
+                }
+            ],
         )
         with patch("src.retrieval.reranker.Reranker") as MockR:
             mock_instance = MagicMock()
@@ -173,7 +255,15 @@ class TestRerankNodeWithEvidence:
         calls = []
         runtime = _make_runtime(progress_callback=lambda *a, **k: calls.append(k))
         state = _make_state(
-            web_ev=[{"url": "https://a.com", "title": "A", "snippet": "s", "source_id": "W1", "source_type": "web"}],
+            web_ev=[
+                {
+                    "url": "https://a.com",
+                    "title": "A",
+                    "snippet": "s",
+                    "source_id": "W1",
+                    "source_type": "web",
+                }
+            ],
         )
         await rerank_node(state, runtime)
         assert any("重排序" in c.get("step", "") for c in calls)
@@ -181,10 +271,29 @@ class TestRerankNodeWithEvidence:
     @pytest.mark.asyncio
     async def test_rerank_stats_structure(self):
         state = _make_state(
-            web_ev=[{"url": "https://a.com", "title": "A", "snippet": "s", "source_id": "W1", "source_type": "web"}],
-            local_ev=[{"doc_id": "d1", "title": "B", "snippet": "s", "source_id": "L1", "source_type": "local"}],
+            web_ev=[
+                {
+                    "url": "https://a.com",
+                    "title": "A",
+                    "snippet": "s",
+                    "source_id": "W1",
+                    "source_type": "web",
+                }
+            ],
+            local_ev=[
+                {
+                    "doc_id": "d1",
+                    "title": "B",
+                    "snippet": "s",
+                    "source_id": "L1",
+                    "source_type": "local",
+                }
+            ],
         )
         result = await rerank_node(state, _make_runtime())
         stats = result["rerank_stats"]
-        assert all(k in stats for k in ("method", "total_before", "total_after", "rrf_fused_count"))
+        assert all(
+            k in stats
+            for k in ("method", "total_before", "total_after", "rrf_fused_count")
+        )
         assert stats["total_before"] == 2

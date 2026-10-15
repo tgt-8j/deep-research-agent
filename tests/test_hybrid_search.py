@@ -137,8 +137,18 @@ class TestHybridSearch:
         ]
         # d1 同时在 BM25 和向量检索中排名靠前，RRF 分数应最高
         vector_results = [
-            {"doc_id": "d1", "title": "A", "snippet": "LangGraph reflection", "_vector_score": 0.95},
-            {"doc_id": "d3", "title": "C", "snippet": "vector embedding", "_vector_score": 0.80},
+            {
+                "doc_id": "d1",
+                "title": "A",
+                "snippet": "LangGraph reflection",
+                "_vector_score": 0.95,
+            },
+            {
+                "doc_id": "d3",
+                "title": "C",
+                "snippet": "vector embedding",
+                "_vector_score": 0.80,
+            },
         ]
         results = hybrid_search(
             "LangGraph reflection",
@@ -180,11 +190,21 @@ class TestHybridSearch:
         # 至少 3 条文档才能让 rank_bm25 IDF 对单一词产生正分
         docs = [
             {"doc_id": "d1", "content": "Python programming basics", "title": "A"},
-            {"doc_id": "d2", "content": "LangGraph reflection loop implementation", "title": "B"},
-            {"doc_id": "d3", "content": "Java concurrent programming patterns", "title": "C"},
+            {
+                "doc_id": "d2",
+                "content": "LangGraph reflection loop implementation",
+                "title": "B",
+            },
+            {
+                "doc_id": "d3",
+                "content": "Java concurrent programming patterns",
+                "title": "C",
+            },
             {"doc_id": "d4", "content": "Rust memory safety guide", "title": "D"},
         ]
-        results = hybrid_search("reflection", docs, k_bm25=4, k_vector=5, vector_results=None)
+        results = hybrid_search(
+            "reflection", docs, k_bm25=4, k_vector=5, vector_results=None
+        )
         assert len(results) >= 1
         assert results[0]["doc_id"] == "d2"
         for r in results:

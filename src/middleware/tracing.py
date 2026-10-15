@@ -1,10 +1,11 @@
-﻿"""请求链路追踪中间件。
+"""请求链路追踪中间件。
 
 参考 Paper-Agent 的 ContextVar + loguru 模式：
 - 为每个 HTTP 请求生成唯一的 request_id
 - 将 request_id 注入到 ContextVar，供全链路日志使用
 - 记录请求耗时和状态码
 """
+
 from __future__ import annotations
 
 import logging

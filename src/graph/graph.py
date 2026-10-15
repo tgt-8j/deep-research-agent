@@ -130,16 +130,26 @@ def build_graph(
             class Runtime:
                 def __init__(self, ctx):
                     self.context = ctx
+
                 @property
-                def llm(self): return self.context["llm"]
+                def llm(self):
+                    return self.context["llm"]
+
                 @property
-                def kb_client(self): return self.context["kb_client"]
+                def kb_client(self):
+                    return self.context["kb_client"]
+
                 @property
-                def progress_emitter(self): return self.context["progress_emitter"]
+                def progress_emitter(self):
+                    return self.context["progress_emitter"]
+
                 @property
-                def retrieval_config(self): return self.context["retrieval_config"]
+                def retrieval_config(self):
+                    return self.context["retrieval_config"]
+
                 @property
-                def cancellation(self): return self.context["cancellation"]
+                def cancellation(self):
+                    return self.context["cancellation"]
 
             return node_fn(state, Runtime(context))
 

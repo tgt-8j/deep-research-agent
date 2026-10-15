@@ -1,4 +1,5 @@
-﻿"""WorkflowService 单元测试。"""
+"""WorkflowService 单元测试。"""
+
 from __future__ import annotations
 
 import sys
@@ -15,10 +16,17 @@ from src.services.workflow import WorkflowService
 
 def _make_config(**overrides) -> AppConfig:
     return AppConfig(
-        api_key="test-key", model="qwen-plus", thread_id="t1",
-        user_id="u1", tenant_id="tenant1", max_iterations=3,
-        enable_memory=False, milvus_host="localhost", milvus_port=19530,
-        milvus_collection="test", enable_milvus=False,
+        api_key="test-key",
+        model="qwen-plus",
+        thread_id="t1",
+        user_id="u1",
+        tenant_id="tenant1",
+        max_iterations=3,
+        enable_memory=False,
+        milvus_host="localhost",
+        milvus_port=19530,
+        milvus_collection="test",
+        enable_milvus=False,
     )
 
 
@@ -61,7 +69,9 @@ class TestEnsureInitialized:
     def test_graph_lazy_loaded(self):
         ws = WorkflowService(_make_config())
         assert ws._graph is None
-        with patch("src.services.workflow.build_graph", return_value=MagicMock()) as mock_build:
+        with patch(
+            "src.services.workflow.build_graph", return_value=MagicMock()
+        ) as mock_build:
             with patch("src.services.workflow.create_default_llm"):
                 with patch("src.services.workflow.create_knowledge_base_client"):
                     ws._ensure_initialized()
@@ -70,7 +80,9 @@ class TestEnsureInitialized:
 
     def test_idempotent(self):
         ws = WorkflowService(_make_config())
-        with patch("src.services.workflow.build_graph", return_value=MagicMock()) as mock_build:
+        with patch(
+            "src.services.workflow.build_graph", return_value=MagicMock()
+        ) as mock_build:
             with patch("src.services.workflow.create_default_llm"):
                 with patch("src.services.workflow.create_knowledge_base_client"):
                     ws._ensure_initialized()
@@ -83,7 +95,9 @@ class TestRun:
     async def test_run_returns_final_report(self):
         ws = WorkflowService(_make_config())
         mock_graph = MagicMock()
-        mock_graph.ainvoke = AsyncMock(return_value={"final": "# Report\n\nConclusion.", "intent": "multiagent"})
+        mock_graph.ainvoke = AsyncMock(
+            return_value={"final": "# Report\n\nConclusion.", "intent": "multiagent"}
+        )
         ws._graph = mock_graph
         result = await ws.run("LangGraph agent", "u1", "t1", "tenant1")
         assert result == "# Report\n\nConclusion."
@@ -119,7 +133,9 @@ class TestResume:
     async def test_resume_success(self):
         ws = WorkflowService(_make_config())
         mock_graph = MagicMock()
-        mock_graph.ainvoke = AsyncMock(return_value={"final": "restored report", "intent": "multiagent"})
+        mock_graph.ainvoke = AsyncMock(
+            return_value={"final": "restored report", "intent": "multiagent"}
+        )
         ws._graph = mock_graph
         checkpoint = {"query": "old q", "phase": "rerank", "final": ""}
         result = await ws.resume("t1", checkpoint)
@@ -134,11 +150,13 @@ class TestResume:
         ws = WorkflowService(_make_config())
         mock_graph = MagicMock()
         call_count = [0]
+
         async def side_effect(*args, **kwargs):
             call_count[0] += 1
             if call_count[0] == 1:
                 raise RuntimeError("checkpoint not found")
             return {"final": "re-run result"}
+
         mock_graph.ainvoke = AsyncMock(side_effect=side_effect)
         ws._graph = mock_graph
         result = await ws.resume("t1", {"query": "q"})
@@ -155,8 +173,15 @@ class TestStreamEvents:
         async def fake_astream_events(*args, **kwargs):
             yield {"event": "on_chain_start", "name": "intent"}
             yield {"event": "on_chain_end", "name": "intent", "data": {"output": {}}}
-            yield {"event": "on_chat_model_stream", "data": {"chunk": {"content": "chunk1"}}}
-            yield {"event": "on_chain_end", "name": "write", "data": {"output": {"final": "# Final", "intent": "multiagent"}}}
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {"chunk": {"content": "chunk1"}},
+            }
+            yield {
+                "event": "on_chain_end",
+                "name": "write",
+                "data": {"output": {"final": "# Final", "intent": "multiagent"}},
+            }
 
         mock_graph.astream_events = fake_astream_events
         ws._graph = mock_graph
@@ -180,7 +205,9 @@ class TestStreamEvents:
             yield {"event": "on_chain_start", "name": "intent"}
 
         mock_graph.astream_events = fake_astream_empty
-        mock_graph.ainvoke = AsyncMock(return_value={"final": "fallback report", "intent": "multiagent"})
+        mock_graph.ainvoke = AsyncMock(
+            return_value={"final": "fallback report", "intent": "multiagent"}
+        )
         ws._graph = mock_graph
 
         emitted = []

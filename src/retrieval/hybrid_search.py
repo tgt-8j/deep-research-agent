@@ -35,8 +35,9 @@ def _tokenize_chinese(text: str) -> list[str]:
     words = re.findall(r"[a-zA-Z0-9_]+", text)
     # 中文字符二元大gram
     chinese_chars = re.findall(r"[一-鿿]", text)
-    bigrams = [chinese_chars[i] + chinese_chars[i + 1]
-               for i in range(len(chinese_chars) - 1)]
+    bigrams = [
+        chinese_chars[i] + chinese_chars[i + 1] for i in range(len(chinese_chars) - 1)
+    ]
     return words + bigrams
 
 
@@ -182,7 +183,9 @@ def hybrid_search(
         vector_ranked = vector_results[:k_vector] if k_vector > 0 else []
         logger.info("[hybrid_search] 向量检索返回 %d 条", len(vector_ranked))
     elif embeddings is not None:
-        logger.info("[hybrid_search] embeddings 参数存在但未提供 vector_results，跳过向量检索")
+        logger.info(
+            "[hybrid_search] embeddings 参数存在但未提供 vector_results，跳过向量检索"
+        )
     else:
         logger.info("[hybrid_search] 向量检索未接入，仅使用 BM25")
 

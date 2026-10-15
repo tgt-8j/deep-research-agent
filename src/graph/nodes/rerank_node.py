@@ -40,6 +40,7 @@ def _rrf_fuse_two_sources(
 
     返回融合后的证据列表（含 _rrf_fuse_score 字段），按分数降序。
     """
+
     # 以 url（web 路）或 doc_id（local 路）为主键，source_id 兜底
     # 同一 URL 在多个 query 里被搜到时，RRF 可以正确合并；
     # 跨源（web URL vs local doc_id）去重需要上游统一 source 标识，当前数据模型暂不支持
@@ -140,8 +141,7 @@ async def rerank_node(
     # 在传给 Reranker 之前清理内部融合字段，避免污染 Reranker 的输出
     _INTERNAL_KEYS = ("_rrf_fuse_score", "_fuse_source", "_doc_id", "_rrf_score")
     clean_fused = [
-        {k: v for k, v in item.items() if k not in _INTERNAL_KEYS}
-        for item in rrf_fused
+        {k: v for k, v in item.items() if k not in _INTERNAL_KEYS} for item in rrf_fused
     ]
 
     # 获取 query 用于相似度计算
@@ -181,7 +181,9 @@ async def rerank_node(
     else:
         # 降级：直接用 RRF 融合结果
         reranked_results = clean_fused
-        rerank_stats["method"] = "rrf_fusion" if len(clean_fused) > 0 else "skipped_no_reranker"
+        rerank_stats["method"] = (
+            "rrf_fusion" if len(clean_fused) > 0 else "skipped_no_reranker"
+        )
 
     rerank_stats["total_after"] = len(reranked_results)
 
