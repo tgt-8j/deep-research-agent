@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 
 from ..config import AppConfig
@@ -59,7 +60,7 @@ class WorkflowService:
             llm=self._llm,
             kb_client=self._kb_client,
             progress_emitter=None,  # SSE 由上层注入
-            bocha_api_key="",  # 从环境变量读取
+            bocha_api_key=os.getenv("BOCHA_API_KEY", ""),  # 从环境变量 BOCHA_API_KEY 读取
         )
         logger.info("工作流服务初始化完成")
 
@@ -265,3 +266,6 @@ class WorkflowService:
                 "final": final,
             }
         )
+
+
+

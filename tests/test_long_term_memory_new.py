@@ -17,7 +17,7 @@ from src.memory.long_term import LongTermMemory, create_long_term_memory
 @pytest.fixture
 def long_mem():
     """创建内存数据库的 LongTermMemory 实例。"""
-    return LongTermMemory(db_path=":memory:")
+    return LongTermMemory(db_path=":memory:", use_embedding=False)
 
 
 # ---------------------------------------------------------------------------
@@ -59,34 +59,34 @@ class TestStoreAndRecall:
 class TestExtractPreferences:
     def test_extract_source_preference(self):
         """提取来源偏好。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         msgs = ["我之前的研究都关注 .gov.cn 官方来源"]
         prefs = mem.extract_preferences(msgs)
         assert any(p["key"] == "source_preference" for p in prefs)
 
     def test_extract_domain_preference(self):
         """提取研究领域偏好。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         msgs = ["我对 LangGraph 和 Agent 系统很感兴趣"]
         prefs = mem.extract_preferences(msgs)
         assert any(p["key"] == "research_domain" for p in prefs)
 
     def test_extract_language_preference(self):
         """提取语言偏好。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         msgs = ["请用中文回答我的问题"]
         prefs = mem.extract_preferences(msgs)
         assert any(p["key"] == "language_preference" for p in prefs)
 
     def test_empty_messages(self):
         """空消息列表应返回空偏好。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         prefs = mem.extract_preferences([])
         assert prefs == []
 
     def test_no_matching_patterns(self):
         """无匹配模式时返回空列表。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         prefs = mem.extract_preferences(["这是一条无关消息"])
         assert prefs == []
 

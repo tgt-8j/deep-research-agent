@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -47,16 +48,27 @@ except ImportError:
 
 
 def _simple_embedding(text: str) -> list[float]:
-    """简单字符级 embedding（无外部依赖时使用）。"""
-    # 使用字符 ASCII 值的归一化作为简化 embedding
+    """中文字二元大gram频率哈希，64维向量（无外部依赖时使用）。"""
     if not text:
         return [0.0] * 64
-    # bytes 迭代直接得到 int，不需要 ord()
-    chars = text.encode("utf-8")[:64]
-    vec = [c / 255.0 for c in chars]
-    while len(vec) < 64:
-        vec.append(0.0)
-    return vec[:64]
+    # 提取中文二元大gram
+    chinese_chars = re.findall(r"[一-鿿]", text)
+    bigrams = [chinese_chars[i] + chinese_chars[i + 1]
+               for i in range(len(chinese_chars) - 1)]
+    # 提取英文单词（2字符以上）
+    words = re.findall(r"[a-zA-Z0-9_]{2,}", text)
+    tokens = bigrams + words
+    # 用 MD5 哈希生成 64 维向量
+    vec = [0.0] * 64
+    for token in tokens:
+        h = hashlib.md5(token.encode("utf-8")).digest()
+        for j in range(4):
+            idx = (h[j * 2] * 256 + h[j * 2 + 1]) % 64
+            vec[idx] += 1.0
+    norm = sum(v * v for v in vec) ** 0.5
+    if norm == 0:
+        return [0.0] * 64
+    return [v / norm for v in vec]
 
 
 def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:

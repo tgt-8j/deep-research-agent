@@ -104,6 +104,38 @@ class RAGSystem:
             )
         return records
 
+    def search_records_with_scores(self, query: str, k: int = 5) -> list[dict]:
+        """带分数的向量检索，每条结果附 _vector_score 字段。
+
+        Milvus 未启用或集合不存在时返回空列表，调用方可据此自动降级。
+        """
+        if self.vectorstore is None or not self.config.enable_milvus:
+            return []
+        try:
+            if not utility.has_collection(self.config.collection_name):
+                return []
+            results = self.vectorstore.similarity_search_with_score(query, k=k)
+            records: list[dict] = []
+            for idx, (doc, score) in enumerate(results, 1):
+                metadata = doc.metadata or {}
+                source = str(metadata.get("source") or "").strip()
+                title = Path(source).name if source else f"本地知识片段-{idx}"
+                records.append(
+                    {
+                        "source_id": f"LOC-{idx}",
+                        "doc_id": source,
+                        "title": title,
+                        "snippet": doc.page_content,
+                        "source_type": "local",
+                        "metadata": metadata,
+                        "_vector_score": score,
+                    }
+                )
+            return records
+        except Exception as e:
+            logger.warning("[search_records_with_scores] 向量检索失败: %s", e)
+            return []
+
     def add_documents(self, documents: list[Document]) -> int:
         self.vectorstore.add_documents(documents)
         return len(documents)

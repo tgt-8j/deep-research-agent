@@ -138,7 +138,7 @@ class SessionStore:
         with self._connection() as conn:
             conn.execute(
                 """
-                INSERT INTO session
+                INSERT OR IGNORE INTO session
                     (session_key, title, query, user_id, tenant_id, status, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
                 """,

@@ -73,7 +73,7 @@ class TestRerankNode:
 
     @pytest.mark.asyncio
     async def test_with_evidence_no_reranker(self):
-        """Reranker 导入失败时降级。"""
+        """Reranker 导入失败时降级到 RRF 融合结果。"""
         from src.graph.nodes.rerank_node import rerank_node
 
         evidence = [
@@ -87,7 +87,8 @@ class TestRerankNode:
             "src.retrieval.reranker.Reranker", side_effect=ImportError("no module")
         ):
             result = await rerank_node(state, runtime)
-        assert result["rerank_stats"]["method"] == "skipped_no_reranker"
+        # 单路（local 为空）时 RRF 融合透传，method = "rrf_fusion"
+        assert result["rerank_stats"]["method"] == "rrf_fusion"
         assert len(result["evidence_pool"]) == 2
 
     @pytest.mark.asyncio
@@ -107,7 +108,7 @@ class TestRerankNode:
 
     @pytest.mark.asyncio
     async def test_merge_web_and_local(self):
-        """合并 web 和 local 证据并传入 reranker。"""
+        """web 和 local 两路证据经 RRF 融合后传入 reranker。"""
         from src.graph.nodes.rerank_node import rerank_node
 
         web_ev = [{"source_id": "WEB-1", "source_type": "web"}]
@@ -123,8 +124,13 @@ class TestRerankNode:
             result = await rerank_node(state, runtime)
         assert result["rerank_stats"]["method"] == "embedding"
         assert len(result["evidence_pool"]) == 2
+        # RRF 融合后的结果传给 reranker，不再是简单 append
         call_args = mock_instance.rerank.call_args
-        assert call_args[1]["evidence_items"] == web_ev + local_ev
+        fused_items = call_args[1]["evidence_items"]
+        assert len(fused_items) == 2
+        # 内部字段已清理
+        for item in fused_items:
+            assert "_rrf_fuse_score" not in item
 
     @pytest.mark.asyncio
     async def test_adds_missing_source_type(self):

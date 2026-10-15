@@ -128,14 +128,20 @@ def build_graph(
 
             # 将 context 注入到 kwargs 中，节点通过 runtime.context 访问
             class Runtime:
-                class context:
-                    llm = context["llm"]
-                    kb_client = context["kb_client"]
-                    progress_emitter = context["progress_emitter"]
-                    retrieval_config = context["retrieval_config"]
-                    cancellation = context["cancellation"]
+                def __init__(self, ctx):
+                    self.context = ctx
+                @property
+                def llm(self): return self.context["llm"]
+                @property
+                def kb_client(self): return self.context["kb_client"]
+                @property
+                def progress_emitter(self): return self.context["progress_emitter"]
+                @property
+                def retrieval_config(self): return self.context["retrieval_config"]
+                @property
+                def cancellation(self): return self.context["cancellation"]
 
-            return node_fn(state, Runtime)
+            return node_fn(state, Runtime(context))
 
         return wrapped
 

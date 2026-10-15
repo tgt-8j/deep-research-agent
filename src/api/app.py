@@ -18,7 +18,7 @@ from ..config import AppConfig
 from ..core.exceptions import register_exception_handlers
 from ..middleware.rate_limit import rate_limit_middleware
 from ..middleware.tracing import tracing_middleware
-from ..persistence import SessionStore, WorkflowCancellation
+from ..persistence import SessionStore
 from ..services.workflow import WorkflowService
 
 logger = logging.getLogger("research.app")
@@ -114,11 +114,23 @@ def create_app(
     import os
 
     if os.getenv("TESTING") != "1":
-        app.add_middleware(tracing_middleware)
-        app.add_middleware(rate_limit_middleware)
+        from starlette.middleware.base import BaseHTTPMiddleware
+        class _TracingMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                return await tracing_middleware(request, call_next)
+        class _RateLimitMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                return await rate_limit_middleware(request, call_next)
+        app.add_middleware(_TracingMiddleware)
+        app.add_middleware(_RateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 生产环境应限制为具体域名
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:8000",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

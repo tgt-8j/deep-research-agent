@@ -109,6 +109,8 @@ def get_rate_limiter(max_concurrent: int = 3) -> SimpleRateLimiter:
 
 def _safe_url(url: str) -> str:
     """校验 URL 安全性，防止 SSRF 攻击。"""
+    import socket
+
     parsed = urlparse(url)
     if parsed.scheme not in _ALLOWED_SCHEMES:
         raise ValueError(f"不支持的协议: {parsed.scheme!r}，仅允许 http/https")
@@ -117,6 +119,14 @@ def _safe_url(url: str) -> str:
         raise ValueError(f"禁止访问内网或保留地址: {host!r}")
     if not host:
         raise ValueError("URL 缺少有效主机名")
+    # DNS 重绑定防护：解析 IP 并拒绝私有地址
+    try:
+        ip = socket.gethostbyname(host)
+    except socket.gaierror:
+        pass  # DNS 解析失败，让后续请求失败
+    else:
+        if any(ip.startswith(p) for p in _BLOCKED_IP_PREFIXES):
+            raise ValueError(f"DNS 解析到私有地址 {ip}，拒绝访问: {host!r}")
     return url
 
 

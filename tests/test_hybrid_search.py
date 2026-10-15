@@ -127,3 +127,65 @@ class TestHybridSearch:
         ]
         results = hybrid_search("LangGraph", docs)
         assert isinstance(results, list)
+
+    def test_hybrid_with_vector_results_keep_scores(self):
+        """传入预计算 vector_results 时，RRF 双路融合生效，keep_scores=True 保留分数。"""
+        docs = [
+            {"doc_id": "d1", "content": "LangGraph reflection loop", "title": "A"},
+            {"doc_id": "d2", "content": "BM25 keyword search", "title": "B"},
+            {"doc_id": "d3", "content": "vector embedding retrieval", "title": "C"},
+        ]
+        # d1 同时在 BM25 和向量检索中排名靠前，RRF 分数应最高
+        vector_results = [
+            {"doc_id": "d1", "title": "A", "snippet": "LangGraph reflection", "_vector_score": 0.95},
+            {"doc_id": "d3", "title": "C", "snippet": "vector embedding", "_vector_score": 0.80},
+        ]
+        results = hybrid_search(
+            "LangGraph reflection",
+            docs,
+            k_vector=2,
+            k_bm25=3,
+            rrf_k=60,
+            vector_results=vector_results,
+            keep_scores=True,
+        )
+        # d1 双路命中，RRF 分数应最高
+        assert results[0]["doc_id"] == "d1"
+        assert "_rrf_score" in results[0]
+        assert results[0]["_rrf_score"] > 0
+
+    def test_hybrid_vector_results_strips_scores_by_default(self):
+        """keep_scores=False（默认）时，内部字段被清理。"""
+        docs = [
+            {"doc_id": "d1", "content": "LangGraph reflection loop", "title": "A"},
+            {"doc_id": "d3", "content": "vector embedding retrieval", "title": "C"},
+        ]
+        vector_results = [
+            {"doc_id": "d1", "title": "A", "snippet": "x", "_vector_score": 0.9},
+        ]
+        results = hybrid_search(
+            "LangGraph",
+            docs,
+            k_vector=1,
+            k_bm25=2,
+            rrf_k=60,
+            vector_results=vector_results,
+        )
+        for r in results:
+            assert "_rrf_score" not in r
+            assert "_vector_score" not in r
+
+    def test_vector_results_none_falls_back_to_bm25(self):
+        """vector_results=None 时行为与旧版一致（BM25-only）。"""
+        # 至少 3 条文档才能让 rank_bm25 IDF 对单一词产生正分
+        docs = [
+            {"doc_id": "d1", "content": "Python programming basics", "title": "A"},
+            {"doc_id": "d2", "content": "LangGraph reflection loop implementation", "title": "B"},
+            {"doc_id": "d3", "content": "Java concurrent programming patterns", "title": "C"},
+            {"doc_id": "d4", "content": "Rust memory safety guide", "title": "D"},
+        ]
+        results = hybrid_search("reflection", docs, k_bm25=4, k_vector=5, vector_results=None)
+        assert len(results) >= 1
+        assert results[0]["doc_id"] == "d2"
+        for r in results:
+            assert "_rrf_score" not in r

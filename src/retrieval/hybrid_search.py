@@ -28,14 +28,16 @@ except ImportError:
 
 
 def _tokenize_chinese(text: str) -> list[str]:
-    """中文分词：按字符切分 + 保留英文单词。"""
+    """中文分词：英文单词 + 中文字二元大gram。"""
     import re
 
     # 英文单词和数字
     words = re.findall(r"[a-zA-Z0-9_]+", text)
-    # 中文字符（单个字作为 token）
-    chars = re.findall(r"[一-鿿]", text)
-    return words + chars
+    # 中文字符二元大gram
+    chinese_chars = re.findall(r"[一-鿿]", text)
+    bigrams = [chinese_chars[i] + chinese_chars[i + 1]
+               for i in range(len(chinese_chars) - 1)]
+    return words + bigrams
 
 
 def _tokenize(text: str) -> list[str]:
@@ -143,16 +145,20 @@ def hybrid_search(
     k_vector: int = 10,
     k_bm25: int = 10,
     rrf_k: int = 60,
+    vector_results: list[dict] | None = None,
+    keep_scores: bool = False,
 ) -> list[dict]:
     """混合检索：BM25 + 向量检索 RRF 融合。
 
     Args:
         query: 查询词
         documents: 文档列表，每个元素需要包含 doc_id/source_id 和 content/snippet
-        embeddings: Embedding 函数（可选），接收 query 返回向量
+        embeddings: Embedding 函数（可选，保留向后兼容）
         k_vector: 向量检索返回数量
         k_bm25: BM25 检索返回数量
         rrf_k: RRF 平滑参数
+        vector_results: 预计算的向量检索结果（带 _vector_score），优先级高于 embeddings
+        keep_scores: 是否保留内部分数字段（_rrf_score / _vector_score / _bm25_score）
 
     Returns:
         融合后的排序列表
@@ -160,40 +166,45 @@ def hybrid_search(
     if not documents:
         return []
 
-    # 确保文档有 doc_id
-    for doc in documents:
+    # 确保文档有 doc_id（浅拷贝避免原地修改调用方数据）
+    safe_docs = [dict(doc) for doc in documents]
+    for doc in safe_docs:
         if "doc_id" not in doc and "source_id" not in doc:
             doc["doc_id"] = doc.get("title", str(doc))[:50]
 
-    # BM25 检索
-    bm25_results = bm25_search(query, documents, top_k=k_bm25)
+    # BM25 检索（使用 safe_docs，避免修改调用方数据）
+    bm25_results = bm25_search(query, safe_docs, top_k=k_bm25)
     logger.info("[hybrid_search] BM25 返回 %d 条", len(bm25_results))
 
-    # 向量检索（如果有 embeddings）
-    vector_results: list[dict] = []
-    if embeddings is not None:
-        try:
-            embeddings(query)
-            # 假设 embeddings 返回向量，需要调用 vectorstore.similarity_search_with_score
-            # 这里简化处理，实际项目中需要传入 vectorstore
-            logger.info("[hybrid_search] 向量检索暂不支持，仅使用 BM25")
-        except Exception as e:
-            logger.warning("[hybrid_search] 向量检索失败: %s", e)
+    # 向量检索：使用预计算的 vector_results（带 _vector_score）
+    vector_ranked: list[dict] = []
+    if vector_results:
+        vector_ranked = vector_results[:k_vector] if k_vector > 0 else []
+        logger.info("[hybrid_search] 向量检索返回 %d 条", len(vector_ranked))
+    elif embeddings is not None:
+        logger.info("[hybrid_search] embeddings 参数存在但未提供 vector_results，跳过向量检索")
+    else:
+        logger.info("[hybrid_search] 向量检索未接入，仅使用 BM25")
 
     # RRF 融合
-    all_rankings = [bm25_results] + ([vector_results] if vector_results else [])
+    all_rankings = [bm25_results]
+    if vector_ranked:
+        all_rankings.append(vector_ranked)
+
     if len(all_rankings) == 1:
         # 只有 BM25，直接返回
-        for doc in bm25_results:
-            doc.pop("_bm25_score", None)
+        if not keep_scores:
+            for doc in bm25_results:
+                doc.pop("_bm25_score", None)
         return bm25_results
 
     merged = rrf_merge(all_rankings, rrf_k=rrf_k)
 
-    # 清理内部字段
-    for doc in merged:
-        doc.pop("_rrf_score", None)
-        doc.pop("_bm25_score", None)
+    if not keep_scores:
+        for doc in merged:
+            doc.pop("_rrf_score", None)
+            doc.pop("_bm25_score", None)
+            doc.pop("_vector_score", None)
 
     return merged
 

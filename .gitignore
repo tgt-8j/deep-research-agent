@@ -25,3 +25,15 @@ Thumbs.db
 # 数据库文件
 *.db
 *.sqlite
+
+# 数据目录
+data/
+
+# pytest cache
+.pytest_cache/
+
+# coverage
+.coverage
+
+# task queue
+.task_queue_data/

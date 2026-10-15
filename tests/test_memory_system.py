@@ -71,7 +71,7 @@ class TestLongTermPreferenceExtraction:
 
     def test_source_preference_extraction(self):
         """来源偏好提取。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         msgs = ["我之前的研究都关注 .gov.cn 官方来源"]
         prefs = mem.extract_preferences(msgs)
         source_prefs = [p for p in prefs if p["key"] == "source_preference"]
@@ -80,7 +80,7 @@ class TestLongTermPreferenceExtraction:
 
     def test_domain_preference_extraction(self):
         """研究领域偏好提取。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         msgs = ["我对 LangGraph 和 Agent 系统很感兴趣"]
         prefs = mem.extract_preferences(msgs)
         domain_prefs = [p for p in prefs if p["key"] == "research_domain"]
@@ -88,7 +88,7 @@ class TestLongTermPreferenceExtraction:
 
     def test_language_preference_extraction(self):
         """语言偏好提取。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         msgs = ["请用中文回答我的问题"]
         prefs = mem.extract_preferences(msgs)
         lang_prefs = [p for p in prefs if p["key"] == "language_preference"]
@@ -97,14 +97,14 @@ class TestLongTermPreferenceExtraction:
 
     def test_no_false_positives(self):
         """无关消息不应触发偏好提取。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         msgs = ["今天天气不错，出去散步吧"]
         prefs = mem.extract_preferences(msgs)
         assert prefs == []
 
     def test_multiple_preferences(self):
         """多条消息应提取多个偏好。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         msgs = [
             "我偏好 .gov.cn 来源",
             "我对 AI 很感兴趣",
@@ -127,7 +127,7 @@ class TestMemoryInjectionComparison:
 
     def test_recall_with_memories(self):
         """有记忆时应返回上下文。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         mem.store(
             "user1",
             [
@@ -143,13 +143,13 @@ class TestMemoryInjectionComparison:
 
     def test_recall_without_memories(self):
         """无记忆时应返回空字符串。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         context = mem.recall("user2", "任意查询")
         assert context == ""
 
     def test_similar_query_returns_more(self):
         """相似查询应返回更多匹配结果。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         mem.store(
             "user1",
             [
@@ -174,7 +174,7 @@ class TestMemoryInjectionComparison:
 
     def test_memory_affects_context(self):
         """记忆注入应影响调研上下文。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         # 存储用户偏好
         mem.store(
             "user1",
@@ -195,7 +195,7 @@ class TestMemoryInjectionComparison:
 
     def test_multi_user_isolation(self):
         """多用户记忆应隔离。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         mem.store(
             "user_a",
             [
@@ -232,7 +232,7 @@ class TestEndToEndIntegration:
         """完整工作流：提取 → 存储 → 召回。"""
         # 1. 初始化
         short_mem = ShortTermMemory(ttl_seconds=3600, backend="memory")
-        long_mem = LongTermMemory(db_path=":memory:")
+        long_mem = LongTermMemory(db_path=":memory:", use_embedding=False)
 
         # 2. 模拟对话历史
         messages = [
@@ -270,7 +270,7 @@ class TestEndToEndIntegration:
 
     def test_fresh_user_vs_returning_user(self):
         """新用户 vs 回头客的对比。"""
-        long_mem = LongTermMemory(db_path=":memory:")
+        long_mem = LongTermMemory(db_path=":memory:", use_embedding=False)
 
         # 新用户
         ctx_new = long_mem.recall("new_user", "有什么建议？")
@@ -291,7 +291,7 @@ class TestEndToEndIntegration:
 
     def test_concurrent_users(self):
         """并发用户场景。"""
-        long_mem = LongTermMemory(db_path=":memory:")
+        long_mem = LongTermMemory(db_path=":memory:", use_embedding=False)
 
         # 模拟多个用户
         for i in range(5):
@@ -321,19 +321,19 @@ class TestEndToEndIntegration:
 class TestEdgeCases:
     def test_empty_preference_extraction(self):
         """空消息列表提取偏好。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         prefs = mem.extract_preferences([])
         assert prefs == []
 
     def test_null_content_storage(self):
         """空内容存储。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         ids = mem.store("user1", [{"content": ""}], memory_type="preference")
         assert len(ids) == 1
 
     def test_very_long_message(self):
         """超长消息处理。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         long_content = "x" * 10000
         mem.store("user1", [{"content": long_content}], memory_type="fact")
         memories = mem.list_memories("user1")
@@ -342,7 +342,7 @@ class TestEdgeCases:
 
     def test_special_characters_in_content(self):
         """特殊字符内容。"""
-        mem = LongTermMemory(db_path=":memory:")
+        mem = LongTermMemory(db_path=":memory:", use_embedding=False)
         content = "你好🌍世界！@#$%^&*()"
         mem.store("user1", [{"content": content}], memory_type="preference")
         memories = mem.list_memories("user1")

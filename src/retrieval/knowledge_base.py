@@ -55,17 +55,24 @@ class KnowledgeBaseClient:
     def hybrid_search(self, query: str, limit: int = 4) -> list[dict]:
         """混合检索：BM25 关键词 + 向量语义 RRF 融合。
 
+        双路召回：
+        - BM25 路：从宽召回文档（k=100）中做关键词精确匹配
+        - 向量路：从 Milvus 中做语义相似度检索（k=limit，带 _vector_score）
+        - 两路通过 Reciprocal Rank Fusion 按 doc_id 融合排序
+
+        Milvus 不可用时自动降级为 BM25-only。
+
         Args:
             query: 查询词
             limit: 返回数量
 
         Returns:
-            融合后的检索结果列表
+            融合后的检索结果列表，含 _rrf_score 字段
         """
         if self._rag_system is None:
             return []
         try:
-            # 获取所有文档用于 BM25
+            # BM25 文档（宽召回）
             all_docs = self._rag_system.search_records(query, k=100)
             if not all_docs:
                 return []
@@ -82,6 +89,23 @@ class KnowledgeBaseClient:
                     }
                 )
 
+            # 向量检索（带分数）— Milvus 不可用时返回 []，自动降级
+            vector_records = self._rag_system.search_records_with_scores(query, k=limit)
+            vector_results = (
+                [
+                    {
+                        "doc_id": r.get("doc_id", ""),
+                        "title": r.get("title", ""),
+                        "snippet": r.get("snippet", ""),
+                        "source_type": "local",
+                        "_vector_score": r.get("_vector_score", 0.0),
+                    }
+                    for r in vector_records
+                ]
+                if vector_records
+                else None
+            )
+
             # 执行混合检索
             results = hybrid_search(
                 query=query,
@@ -89,6 +113,8 @@ class KnowledgeBaseClient:
                 k_vector=limit,
                 k_bm25=limit,
                 rrf_k=60,
+                vector_results=vector_results,
+                keep_scores=True,  # 保留 _rrf_score 供调用方读取
             )
 
             # 清理内部字段，返回标准格式
@@ -121,7 +147,8 @@ def create_knowledge_base_client(
 
     替代原来的 init_rag_system() 全局函数，改为工厂函数返回实例。
     """
-    from ..mult_agents.rag.core import RAGConfig
+    # 与文件顶部 L18 的导入路径保持一致（app.mult_agents，而非 src.mult_agents）
+    from app.mult_agents.rag.core import RAGConfig
 
     config = RAGConfig(
         milvus_host=milvus_host,
@@ -133,5 +160,5 @@ def create_knowledge_base_client(
         rag_system = RAGSystem(api_key, config)
         return KnowledgeBaseClient(rag_system=rag_system)
     except Exception as e:
-        print(f"知识库客户端初始化失败: {e}")
+        logger.warning("知识库客户端初始化失败: %s", e)
         return KnowledgeBaseClient(rag_system=None)
