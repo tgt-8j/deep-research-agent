@@ -8,8 +8,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from app.metrics import track_node
-
+from ...metrics import track_node
 from ...prompt.loader import load_prompt
 from ...retrieval import _filter_records, _is_official_domain, bocha_web_search
 from ...state import ResearchState

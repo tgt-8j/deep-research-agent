@@ -1,6 +1,8 @@
 """配置模块：统一管理应用配置。
 
-参考 shopkeeper-agent 的 conf/ 目录，将配置从 mult_agents/config.py 迁移过来。
+配置来源优先级：环境变量 > config.json > 默认值。
+.env 的加载统一由 ``src.settings`` 负责（导入即加载），
+这样无论从哪个 entrypoint 启动，行为都一致。
 """
 
 from __future__ import annotations
@@ -10,13 +12,7 @@ import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-# 加载项目根目录的 .env
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_ENV_PATH = _PROJECT_ROOT / ".env"
-if _ENV_PATH.exists():
-    load_dotenv(_ENV_PATH)
+from .settings import CONFIG_PATH
 
 
 @dataclass(frozen=True)
@@ -54,7 +50,7 @@ class AppConfig:
     @staticmethod
     def from_file(path: str | Path | None = None) -> AppConfig:
         """从 config.json 文件加载配置。"""
-        config_path = Path(path) if path else _PROJECT_ROOT / "config.json"
+        config_path = Path(path) if path else CONFIG_PATH
         if not config_path.exists():
             raise FileNotFoundError(f"配置文件不存在: {config_path}")
         data = json.loads(config_path.read_text(encoding="utf-8"))

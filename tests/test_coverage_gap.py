@@ -243,9 +243,22 @@ class TestWebSearchNode:
     """网页搜索节点测试。"""
 
     @pytest.mark.asyncio
-    async def test_no_api_key(self):
-        """未配置 API Key 时不应报错，返回空结果。"""
-        from src.graph.nodes.web_search_node import web_search_node
+    async def test_no_api_key(self, monkeypatch):
+        """未配置 API Key 时不应报错，返回空结果。
+
+        这里必须把真实检索 mock 掉：节点在 api_key 为空时会回退去读环境变量
+        ``BOCHA_API_KEY``，本机配了 key 的话，这条「无 key」用例反而会真的联网
+        搜到结果而失败（CI 上因为没配 key 才"通过"）——典型的非密闭测试。
+        """
+        import importlib
+
+        ws_module = importlib.import_module("src.graph.nodes.web_search_node")
+
+        async def _no_results(*args, **kwargs):
+            return []
+
+        monkeypatch.setattr(ws_module, "bocha_web_search", _no_results)
+        monkeypatch.delenv("BOCHA_API_KEY", raising=False)
 
         state = {
             "query": "测试",
@@ -254,7 +267,7 @@ class TestWebSearchNode:
             "supplementary_queries": [],
         }
         runtime = _make_runtime(llm=None)
-        result = await web_search_node(state, runtime)
+        result = await ws_module.web_search_node(state, runtime)
         assert result["web_evidence"] == []
         assert "web_search" in result
 

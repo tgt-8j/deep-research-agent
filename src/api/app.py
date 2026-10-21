@@ -37,6 +37,9 @@ class AppDependencies:
         self._config = config
         self._session_store: SessionStore | None = None
         self._workflow_service: WorkflowService | None = None
+        # 正在运行的调研任务：session_key -> 取消信号。
+        # 取消接口按 session 找到对应任务；放在依赖容器里而不是模块级全局变量。
+        self.active_runs: dict[str, WorkflowCancellation] = {}
 
     @property
     def session_store(self) -> SessionStore:

@@ -1,15 +1,17 @@
-"""Rerank 重排序节点：对 web/local 两路检索结果进行粗筛+精排。
+"""Rerank 重排序节点：对 web/local 两路检索结果做粗筛+精排。
 
 职责：
 - 合并 web_evidence + local_evidence
-- 对 web/local 两路做 RRF 双路融合（按 source_id 去重，两路都出现的证据分数更高）
-- 用 Embedding 向量相似度做两级重排序（粗筛 Top-30，精排 Top-10）
+- 对 web/local 两路做 RRF 双路融合（按 url/doc_id 去重，两路都出现的证据分数更高）
+- 两级重排序（两级信号不同，不是同一个 embedding 算两遍）：
+    第一级 BM25 词法粗筛 Top-30（无 API 调用）
+    第二级 语义精排 Top-10（cross-encoder，未安装时降级为 embedding 余弦）
 - 输出 rerank_stats 统计信息和重新排序后的 evidence_pool
-- 降级策略：Embedding 不可用时跳过重排序，直接用 RRF 融合结果作为输出
+- 降级策略：Reranker 不可用时直接用 RRF 融合结果作为输出
 
 设计原则：
 - 不修改原始证据数据，只改变排序
-- rerank_stats 记录重排序过程，便于调试和面试讲解
+- rerank_stats 记录每级用了什么方法，便于调试和面试讲解
 - 与 deep_dive_node 分离：rerank 只做排序，deep_dive 做评分/去重/冲突检测
 """
 
@@ -18,8 +20,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.metrics import track_node
-
+from ...metrics import track_node
 from ...retrieval.hybrid_search import rrf_merge
 from ...state import ResearchState
 

@@ -130,12 +130,38 @@ def _safe_url(url: str) -> str:
     return url
 
 
+# 官方/权威域名后缀（按后缀匹配，不做子串匹配）
+_OFFICIAL_SUFFIXES = (
+    ".gov.cn",
+    ".gov",
+    ".edu.cn",
+    ".edu",
+    ".ac.cn",
+    ".mil",
+    ".mil.cn",
+)
+
+
 def _is_official_domain(domain: str) -> bool:
-    value = domain.lower()
-    return (
-        value.endswith((".gov.cn", ".gov", ".edu", ".edu.cn"))
-        or "gov" in value
-        or "official" in value
+    """判断是否为官方/权威域名（按域名后缀匹配）。
+
+    旧实现是 ``"gov" in domain or "official" in domain`` 这样的子串判断，
+    ``government-scam.com``、``unofficial-news.com`` 都会被当成权威来源，
+    于是垃圾站点白拿 0.88 的可信度分。改成后缀匹配后这类域名不再命中。
+    """
+    host = str(domain or "").strip().lower().rstrip(".")
+    if not host:
+        return False
+    if "://" in host:  # 容错：调用方可能传完整 URL
+        host = (urlparse(host).hostname or "").lower()
+    if "@" in host:  # 容错：user@host
+        host = host.rsplit("@", 1)[-1]
+    host = host.split(":", 1)[0]  # 去掉端口
+    host = host.removeprefix("www.")
+    if not host:
+        return False
+    return any(
+        host == suffix[1:] or host.endswith(suffix) for suffix in _OFFICIAL_SUFFIXES
     )
 
 
@@ -145,33 +171,81 @@ def _is_bad_web_domain(domain: str) -> bool:
     return any(item in value for item in blocked)
 
 
-def _extract_query_terms(query: str) -> list[str]:
-    """提取查询关键词用于相关性评估。"""
-    parts = re.findall(r"[一-鿿]{2,}|[A-Za-z0-9_-]{3,}", query.lower())
-    stopwords = {"什么", "如何", "以及", "一个", "关于", "这个", "那个", "进行", "基于"}
-    return [p for p in parts if p not in stopwords][:12]
+_CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]+")
+_ASCII_TERM_RE = re.compile(r"[a-z0-9][a-z0-9_.\-]*")
+_STOPWORDS = {
+    "什么",
+    "如何",
+    "以及",
+    "一个",
+    "关于",
+    "这个",
+    "那个",
+    "进行",
+    "基于",
+    "the",
+    "and",
+    "for",
+    "with",
+    "what",
+    "how",
+}
+# 词法预筛阈值：低于该分数且非权威来源才丢弃（宁松勿严，真正的相关性判断交给 LLM）
+_MIN_RELEVANCE = 0.2
+
+
+def _extract_query_terms(query: str, max_terms: int = 24) -> list[str]:
+    """提取查询关键词：中文按二元 bigram，英文/数字按词。
+
+    旧实现用 ``[一-鿿]{2,}`` 贪婪匹配，整个中文问句会被当成**一个** term，
+    于是除了"整句原样出现"以外一律判 0 分，相关的中文结果被成批丢弃。
+
+    例：``2025年中国新能源汽车出口量是多少`` 现在会切成
+    ``2025 / 中国 / 国新 / 新能 / 能源 / 源汽 / 汽车 / 车出 / 出口 / 口量 ...``
+    """
+    text = (query or "").lower()
+    terms: list[str] = []
+    # 英文 / 数字：单字符多是噪声，保留长度 >= 2 的
+    terms.extend(t for t in _ASCII_TERM_RE.findall(text) if len(t) >= 2)
+    # 中文：连续中文串切二元 bigram；单字串保留单字
+    for run in _CJK_RUN_RE.findall(text):
+        if len(run) == 1:
+            terms.append(run)
+        else:
+            terms.extend(run[i : i + 2] for i in range(len(run) - 1))
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        if term in _STOPWORDS or term in seen:
+            continue
+        seen.add(term)
+        ordered.append(term)
+        if len(ordered) >= max_terms:
+            break
+    return ordered
 
 
 def _estimate_relevance(query: str, text: str) -> float:
-    """估算文本与查询的相关性分数。"""
+    """估算文本与查询的相关性：命中的查询 term 占比，取值 [0, 1]。"""
     terms = _extract_query_terms(query)
     if not terms:
         return 0.0
-    haystack = text.lower()
+    haystack = (text or "").lower()
     hits = sum(1 for term in terms if term in haystack)
-    return hits / max(len(terms), 1)
+    return hits / len(terms)
 
 
 def _filter_records(query: str, records: list[dict]) -> tuple[list[dict], dict]:
-    """过滤低质量搜索结果。"""
+    """过滤低质量搜索结果（空内容 / 拉黑域名 / 与查询不相关）。"""
     kept = []
     stats = {
         "raw_count": len(records),
         "kept_count": 0,
         "dropped_irrelevant": 0,
         "dropped_domain": 0,
+        "min_relevance": _MIN_RELEVANCE,
     }
-    blocked_domains = ["datasheet", "bdtic", "doc88", "elecfans", "down"]
 
     for record in records:
         title = str(record.get("title", ""))
@@ -180,12 +254,14 @@ def _filter_records(query: str, records: list[dict]) -> tuple[list[dict], dict]:
         if not title and not snippet:
             stats["dropped_domain"] += 1
             continue
-        if any(b in domain.lower() for b in blocked_domains):
+        # 与 _is_bad_web_domain 共用同一份黑名单，避免两处维护两份
+        if _is_bad_web_domain(domain):
             stats["dropped_domain"] += 1
             continue
         relevance = _estimate_relevance(query, f"{title}\n{snippet}")
         record["relevance_score"] = relevance
-        if relevance < 0.2 and not _is_official_domain(domain):
+        # 权威域名豁免：官方站点常常用词与问法不同，不因词法不命中被丢掉
+        if relevance < _MIN_RELEVANCE and not _is_official_domain(domain):
             stats["dropped_irrelevant"] += 1
             continue
         kept.append(record)

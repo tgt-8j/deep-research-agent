@@ -160,9 +160,8 @@ class TestRunEndpoint:
 class TestStreamEndpoint:
     """POST /api/v1/research/stream 测试。
 
-    注意：SSE 流式端点在生产环境中使用 threading + asyncio 混合模式，
-    在测试环境的异步上下文中可能触发 event loop 问题。
-    此处测试流式协议的正确性（event 结构），不测试完整执行路径。
+    完整的流式执行路径见 ``tests/test_stream_sse.py``（用假 service 驱动真实路由）。
+    这里只做事件协议结构的检查。
     """
 
     def test_stream_protocol_structure(self):
@@ -184,17 +183,18 @@ class TestStreamEndpoint:
         assert any(e["type"] == "final" for e in events)
 
     def test_stream_event_serialization(self):
-        """验证 SSE 事件可以正确序列化和反序列化。"""
+        """``_emit`` 必须返回合法 JSON 字符串，前端才能 JSON.parse。"""
         import json
 
         from src.api.routers.research_router import _emit
 
         event = {"type": "progress", "node": "triage", "message": "分诊中"}
         emitted = _emit(event)
-        assert "timestamp" in emitted
-        serialized = json.dumps(emitted, ensure_ascii=False)
-        deserialized = json.loads(serialized)
+        # 必须是字符串：直接插值 dict 会得到 Python repr（单引号），前端解析失败
+        assert isinstance(emitted, str)
+        deserialized = json.loads(emitted)
         assert deserialized["type"] == "progress"
+        assert deserialized["timestamp"]
 
 
 class TestSessionEndpoints:

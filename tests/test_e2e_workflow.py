@@ -381,25 +381,23 @@ class TestCancellationBoundary:
 
     @pytest.mark.asyncio
     async def test_guarded_calls_cancellation_check(self):
-        """验证取消边界在节点前后检查 cancellation 信号。"""
+        """验证取消边界在节点前后各检查一次 cancellation 信号。"""
         from src.graph.graph import _with_cancellation_boundary
 
-        async def dummy_node(state, runtime):
+        async def dummy_node(state, **kwargs):
             return {"test": "value"}
 
         cancellation = MagicMock()
-        cancellation.raise_if_requested = MagicMock()
+        cancellation.is_requested = MagicMock(return_value=False)
 
-        guarded = _with_cancellation_boundary("test", dummy_node)
+        guarded = _with_cancellation_boundary("test", dummy_node, cancellation)
 
-        class FakeRuntime:
-            pass
+        result = await guarded({})
 
-        runtime = FakeRuntime()
-        runtime.cancellation = cancellation
-
-        await guarded({}, runtime=runtime)
-        assert cancellation.raise_if_requested.called
+        assert result == {"test": "value"}
+        # 开始前 + 结束后各查一次；没请求就不该抛
+        assert cancellation.is_requested.call_count == 2
+        cancellation.raise_if_requested.assert_not_called()
 
 
 # ===================================================================

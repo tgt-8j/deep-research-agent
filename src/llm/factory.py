@@ -1,20 +1,15 @@
-"""LLM 工厂：根据配置创建 LLMAdapter 实例。
-
-参考 shopkeeper-agent 的 llm/factory.py 和 llm/config.py。
-"""
+"""LLM 工厂：根据配置创建 LLMAdapter 实例。"""
 
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
-from dotenv import load_dotenv
-
+from ..settings import load_env
 from .adapter import LLMAdapter, ModelConfig
 
-_ENV_PATH = Path(__file__).resolve().parents[3] / ".env"
-if _ENV_PATH.exists():
-    load_dotenv(_ENV_PATH)
+# .env 由 src.settings 统一加载；这里显式调用一次（幂等），
+# 保证单独导入本模块时环境变量也已就绪。
+load_env()
 
 
 def create_default_llm() -> LLMAdapter:

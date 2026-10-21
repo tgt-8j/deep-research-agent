@@ -1,6 +1,7 @@
 """主入口：FastAPI 应用启动。
 
-参考 shopkeeper-agent 的 main.py，提供统一的启动入口。
+项目根路径与 .env 的定位统一由 ``src.settings`` 负责，本文件不再自己算
+``parents[n]``（改造前这里把 ``src/`` 当成了项目根，导致根目录的 .env 读不到）。
 """
 
 from __future__ import annotations
@@ -9,24 +10,30 @@ import logging
 import sys
 from pathlib import Path
 
-# Windows UTF-8 修复
+# Windows 下强制 UTF-8 输出，避免中文日志乱码。
+# 只包装"还不是 UTF-8"的流，避免在 pytest 等已替换 sys.stdout 的环境里二次包装。
 if sys.platform == "win32":
     import io
 
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    for _name in ("stdout", "stderr"):
+        _stream = getattr(sys, _name, None)
+        if _stream is None or not hasattr(_stream, "buffer"):
+            continue
+        _encoding = (getattr(_stream, "encoding", "") or "").lower().replace("-", "")
+        if _encoding != "utf8":
+            setattr(
+                sys,
+                _name,
+                io.TextIOWrapper(_stream.buffer, encoding="utf-8", errors="replace"),
+            )
 
-# 确保项目根目录在 Python 路径中
-_PROJECT_ROOT = Path(__file__).resolve().parent
+# src/main.py -> parents[1] = 项目根。必须加项目根而非 src/，
+# 否则 `python src/main.py` 方式启动时 `import src.*` 会失败。
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from dotenv import load_dotenv
-
-# 加载环境变量
-_env_path = _PROJECT_ROOT / ".env"
-if _env_path.exists():
-    load_dotenv(_env_path)
+from src.settings import CONFIG_PATH, ENV_PATH  # noqa: E402  导入即加载 .env
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,13 +49,11 @@ def create_application():
 
     try:
         config = AppConfig.from_file()
+        logger.info("配置来源: %s", CONFIG_PATH)
     except FileNotFoundError:
-        logger.warning("未找到 config.json，尝试从环境变量加载")
-        try:
-            config = AppConfig.from_env()
-        except Exception as e:
-            logger.error(f"配置加载失败: {e}")
-            raise
+        logger.warning("未找到 %s，回退到环境变量", CONFIG_PATH.name)
+        logger.info("环境变量文件: %s (exists=%s)", ENV_PATH, ENV_PATH.exists())
+        config = AppConfig.from_env()
 
     return create_app(config)
 

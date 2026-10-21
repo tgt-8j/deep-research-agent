@@ -1,15 +1,17 @@
 """工作流编排模块：定义 LangGraph 节点、条件路由与整体执行路径。
 
-参考 shopkeeper-agent 的 graph.py 和 Paper-Agent 的 graph.py：
-- 使用 StateGraph 定义状态机
-- 条件边实现分支逻辑
+- 使用 StateGraph 定义状态机，条件边实现分支逻辑
 - 支持子循环（reflect -> web_search/local_rag）
-- 【Paper-Agent 借鉴】每个节点用取消边界包裹，支持用户中途停止
-- 【Paper-Agent 借鉴】使用 MemorySaver checkpointer 支持中断恢复
+- 每个节点用取消边界包裹，支持用户中途停止
+- 使用 MemorySaver checkpointer 支持中断恢复
+
+取消信号的传递方式见 ``src/persistence/cancellation.py``：
+图是编译一次、多请求复用的，所以信号走 ContextVar 而不是节点闭包。
 """
 
 from __future__ import annotations
 
+import inspect
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -17,6 +19,7 @@ from typing import Any
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from ..persistence.cancellation import WorkflowCancellation, current_cancellation
 from ..state import ResearchState
 from .nodes import (
     analyze_node,
@@ -63,28 +66,45 @@ def _should_continue_research(state: ResearchState) -> str:
     return "write"
 
 
-def _with_cancellation_boundary(node_name: str, node: Callable) -> Callable:
-    """【借鉴 Paper-Agent】给节点加上取消检查边界。
+def _raise_if_cancelled(
+    cancellation: WorkflowCancellation | None,
+    node_name: str,
+    phase: str,
+) -> None:
+    """在节点边界检查停止请求；命中则抛 ``CancelledError`` 中止本次运行。"""
+    if cancellation is None or not cancellation.is_requested():
+        return
+    logger.info("[cancel] %s 节点（%s）检测到停止请求，中止本次运行", node_name, phase)
+    cancellation.raise_if_requested()
 
-    节点开始前和结束后各检查一次 cancellation 信号。
-    如果用户点了停止，丢弃当前节点的未提交结果，
-    让恢复时从上一个稳定状态重新执行。
+
+def _with_cancellation_boundary(
+    node_name: str,
+    node: Callable,
+    default_cancellation: WorkflowCancellation | None = None,
+) -> Callable:
+    """给节点加上取消检查边界。
+
+    取消信号优先取当前异步上下文绑定的那个（``current_cancellation()``），
+    没绑定时退回 ``build_graph`` 传入的默认值。请求级信号由
+    ``cancellation_scope`` 在服务层绑定 —— 图编译一次、多请求复用，
+    信号不能挂在闭包上，否则并发请求会互相取消。
+
+    节点开始前和结束后各检查一次：结束后命中就丢弃该节点的返回值，
+    让恢复时从上一个稳定 checkpoint 重新执行。
     """
 
     async def _guarded(state: ResearchState, **kwargs) -> dict:
-        # 从 runtime context 获取取消信号
-        runtime = kwargs.get("runtime")
-        cancellation = getattr(runtime, "cancellation", None) if runtime else None
+        cancellation = current_cancellation() or default_cancellation
 
-        # 开始检查
-        if cancellation is not None:
-            cancellation.raise_if_requested()
+        _raise_if_cancelled(cancellation, node_name, "开始前")
 
-        result = await node(state, **kwargs)
+        result = node(state, **kwargs)
+        if inspect.isawaitable(result):
+            result = await result
 
-        # 结束检查（确保节点中间结果不污染状态）
-        if cancellation is not None:
-            cancellation.raise_if_requested()
+        # 节点执行期间可能刚收到停止请求：丢弃未提交的结果
+        _raise_if_cancelled(cancellation, node_name, "结束后")
 
         return result
 
@@ -106,7 +126,7 @@ def build_graph(
         kb_client: KnowledgeBaseClient 实例
         progress_emitter: SSE 进度上报回调
         bocha_api_key: Bocha Web Search API Key
-        cancellation: 取消信号对象（Paper-Agent 模式）
+        cancellation: 默认取消信号；请求级信号由 ``cancellation_scope`` 绑定后优先生效
 
     Returns:
         编译后的 StateGraph（带 MemorySaver checkpointer）
@@ -123,7 +143,8 @@ def build_graph(
                 "kb_client": kb_client,
                 "progress_emitter": progress_emitter,
                 "retrieval_config": {"bocha_api_key": bocha_api_key},
-                "cancellation": cancellation,  # 传递取消信号
+                # 请求级信号来自 ContextVar；build_graph 的入参只是默认值
+                "cancellation": current_cancellation() or cancellation,
             }
 
             # 将 context 注入到 kwargs 中，节点通过 runtime.context 访问
@@ -155,48 +176,23 @@ def build_graph(
 
         return wrapped
 
+    def _guard(name: str, node_fn: Callable) -> Callable:
+        """节点包装：注入 Runtime Context + 取消边界。"""
+        return _with_cancellation_boundary(name, _make_node(node_fn), cancellation)
+
     # 添加节点（每个节点都包裹取消边界）
-    workflow.add_node(
-        "intent", _with_cancellation_boundary("intent", _make_node(intent_node))
-    )
-    workflow.add_node(
-        "query_rewrite",
-        _with_cancellation_boundary("query_rewrite", _make_node(query_rewrite_node)),
-    )
-    workflow.add_node(
-        "direct_answer",
-        _with_cancellation_boundary("direct_answer", _make_node(direct_answer_node)),
-    )
-    workflow.add_node(
-        "plan", _with_cancellation_boundary("plan", _make_node(plan_node))
-    )
-    workflow.add_node(
-        "web_search",
-        _with_cancellation_boundary("web_search", _make_node(web_search_node)),
-    )
-    workflow.add_node(
-        "local_rag",
-        _with_cancellation_boundary("local_rag", _make_node(local_rag_node)),
-    )
-    workflow.add_node(
-        "rerank", _with_cancellation_boundary("rerank", _make_node(rerank_node))
-    )
-    workflow.add_node(
-        "deep_dive",
-        _with_cancellation_boundary("deep_dive", _make_node(deep_dive_node)),
-    )
-    workflow.add_node(
-        "approval", _with_cancellation_boundary("approval", _make_node(approval_node))
-    )
-    workflow.add_node(
-        "analyze", _with_cancellation_boundary("analyze", _make_node(analyze_node))
-    )
-    workflow.add_node(
-        "reflect", _with_cancellation_boundary("reflect", _make_node(reflect_node))
-    )
-    workflow.add_node(
-        "write", _with_cancellation_boundary("write", _make_node(write_node))
-    )
+    workflow.add_node("intent", _guard("intent", intent_node))
+    workflow.add_node("query_rewrite", _guard("query_rewrite", query_rewrite_node))
+    workflow.add_node("direct_answer", _guard("direct_answer", direct_answer_node))
+    workflow.add_node("plan", _guard("plan", plan_node))
+    workflow.add_node("web_search", _guard("web_search", web_search_node))
+    workflow.add_node("local_rag", _guard("local_rag", local_rag_node))
+    workflow.add_node("rerank", _guard("rerank", rerank_node))
+    workflow.add_node("deep_dive", _guard("deep_dive", deep_dive_node))
+    workflow.add_node("approval", _guard("approval", approval_node))
+    workflow.add_node("analyze", _guard("analyze", analyze_node))
+    workflow.add_node("reflect", _guard("reflect", reflect_node))
+    workflow.add_node("write", _guard("write", write_node))
 
     # 定义边
     workflow.add_edge(START, "intent")

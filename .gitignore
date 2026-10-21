@@ -35,6 +35,16 @@ data/
 
 # coverage
 .coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# 运行产物（不要提交）
+startup.log
+*.log
+output/
+tests/_tmp/
+.pytest_tmp/
 
 # task queue
 .task_queue_data/

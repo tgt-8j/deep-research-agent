@@ -1,0 +1,13 @@
+{
+  "api_key": "your_dashscope_api_key_here",
+  "model": "qwen-plus",
+  "thread_id": "default",
+  "user_id": "default_user",
+  "tenant_id": "default_tenant",
+  "max_iterations": 3,
+  "enable_memory": true,
+  "milvus_host": "127.0.0.1",
+  "milvus_port": 19530,
+  "milvus_collection": "mult_agent_memory",
+  "enable_milvus": false
+}

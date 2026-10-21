@@ -13,8 +13,7 @@ from typing import Any
 
 from langgraph.types import interrupt
 
-from app.metrics import track_node
-
+from ...metrics import track_node
 from ...state import ResearchState
 
 logger = logging.getLogger("research.nodes.approval")

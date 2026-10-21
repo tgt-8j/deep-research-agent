@@ -8,16 +8,8 @@ from __future__ import annotations
 
 import logging
 
-# 直接从原模块导入，保持兼容性
-import sys
-from pathlib import Path
-
-_app_root = Path(__file__).resolve().parents[1]
-if str(_app_root) not in sys.path:
-    sys.path.insert(0, str(_app_root))
-from app.mult_agents.rag.core import RAGConfig, RAGSystem  # noqa: F401  # 供外部引用
-
 from .hybrid_search import hybrid_search
+from .rag_core import RAGConfig, RAGSystem
 
 logger = logging.getLogger(__name__)
 
@@ -147,9 +139,6 @@ def create_knowledge_base_client(
 
     替代原来的 init_rag_system() 全局函数，改为工厂函数返回实例。
     """
-    # 与文件顶部 L18 的导入路径保持一致（app.mult_agents，而非 src.mult_agents）
-    from app.mult_agents.rag.core import RAGConfig
-
     config = RAGConfig(
         milvus_host=milvus_host,
         milvus_port=milvus_port,

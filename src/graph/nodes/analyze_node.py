@@ -8,8 +8,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from app.metrics import track_node
-
+from ...metrics import track_node
 from ...prompt.loader import load_prompt
 from ...prompt.models import AnalysisOutput, FindingItem
 from ...state import ResearchState

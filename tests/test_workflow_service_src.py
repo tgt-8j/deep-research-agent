@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import pytest
 
 from src.config import AppConfig
+from src.persistence.cancellation import WorkflowCancellation
 from src.services.workflow import WorkflowService
 
 
@@ -38,18 +39,17 @@ class TestBuildState:
         assert state["user_id"] == "user_42"
         assert state["tenant_id"] == "tenant_x"
         assert state["phase"] == "initialized"
-        assert state["cancellation"] is None
 
     def test_max_iterations_from_config(self):
         ws = WorkflowService(_make_config())
         state = ws._build_state("q", "u", "t", "tenant")
         assert state["max_iterations"] == 3
 
-    def test_cancellation_injected(self):
-        cancellation = MagicMock()
+    def test_cancellation_not_in_state(self):
+        """取消信号不进 state：它含 asyncio.Event、不可序列化，会污染 checkpoint。"""
         ws = WorkflowService(_make_config())
-        state = ws._build_state("q", "u", "t", "tenant", cancellation=cancellation)
-        assert state["cancellation"] is cancellation
+        state = ws._build_state("q", "u", "t", "tenant")
+        assert "cancellation" not in state
 
     def test_empty_strings_for_optional_fields(self):
         ws = WorkflowService(_make_config())
@@ -109,14 +109,31 @@ class TestRun:
 
     @pytest.mark.asyncio
     async def test_run_passes_cancellation(self):
+        """取消信号走 ContextVar，而不是塞进 state。
+
+        state 会进 checkpointer 快照，而 WorkflowCancellation 里含 asyncio.Event，
+        不可序列化 —— 所以它只在 ainvoke 期间绑定在上下文里，结束后恢复。
+        """
+        from src.persistence.cancellation import current_cancellation
+
         ws = WorkflowService(_make_config())
-        cancellation = MagicMock()
-        mock_graph = MagicMock()
-        mock_graph.ainvoke = AsyncMock(return_value={"final": "ok", "intent": "direct"})
-        ws._graph = mock_graph
+        cancellation = WorkflowCancellation()
+        seen: dict = {}
+
+        async def fake_ainvoke(state, config):
+            seen["state"] = state
+            seen["cancellation"] = current_cancellation()
+            return {"final": "ok", "intent": "direct"}
+
+        ws._graph = MagicMock()
+        ws._graph.ainvoke = fake_ainvoke
+
         await ws.run("q", "u1", "t1", "tenant1", cancellation=cancellation)
-        state = mock_graph.ainvoke.call_args[0][0]
-        assert state["cancellation"] is cancellation
+
+        assert seen["cancellation"] is cancellation
+        assert "cancellation" not in seen["state"]
+        # 作用域结束必须恢复，避免泄漏给同一线程里的下一个请求
+        assert current_cancellation() is None
 
     @pytest.mark.asyncio
     async def test_run_empty_final_defaults_to_empty_string(self):

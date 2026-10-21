@@ -9,8 +9,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 
-from app.metrics import track_node
-
+from ...metrics import track_node
 from ...prompt.loader import load_prompt
 from ...state import ResearchState
 
@@ -33,11 +32,20 @@ async def reflect_node(
 
     missing_gaps = state.get("missing_gaps", [])
     if not missing_gaps:
-        logger.info("[reflect] 无信息缺口，直接跳至 analyze 节点")
+        # 没有缺口就直接回 analyze。这里**必须**递增 iteration：
+        # analyze 若再次给出 needs_more_research=True，没有计数就会
+        # analyze -> reflect -> analyze 空转，最终撞 GraphRecursionError。
+        current_iteration = state.get("iteration", 0)
+        new_iteration = current_iteration + 1
+        logger.info(
+            "[reflect] 无信息缺口，跳回 analyze（iteration %d -> %d）",
+            current_iteration,
+            new_iteration,
+        )
         if progress:
             progress("reflect", step="无需补搜，跳至分析", status="success")
         # 使用 Command 跨节点跳转，跳过 web_search/local_rag
-        return Command(goto="analyze")
+        return Command(goto="analyze", update={"iteration": new_iteration})
 
     logger.info("[reflect] 信息缺口=%s", missing_gaps)
 

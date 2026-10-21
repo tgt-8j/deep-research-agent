@@ -12,7 +12,11 @@ dependencies = [
   "langchain",
   "langchain-community",
   "langchain-core",
+  # src/llm/adapter.py 直接 import langchain_openai.ChatOpenAI。
+  # 之前靠别的包间接带进来，干净环境里会 ImportError 后静默降级成"无 LLM"。
+  "langchain-openai",
   "langchain-milvus",
+  "langchain-text-splitters",
   "dashscope",
   "pymilvus",
   "psycopg[binary,pool]",
@@ -22,36 +26,57 @@ dependencies = [
   "typing-extensions",
   "prometheus-client>=0.20.0",
   "PyJWT>=2.8.0",
-  "rank-bm25"
+  "rank-bm25",
+  # src/retrieval/reranker.py 用 numpy 算余弦相似度
+  "numpy",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-asyncio",
+  "pytest-cov",
+  "ruff==0.16.10",
+]
+# 可选的多模型后端：adapter.py 里是 try/except 导入，按需安装
+llm-extras = [
+  "langchain-anthropic",
+  "langchain-ollama",
 ]
 
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+include = ["src*", "app*"]
+exclude = ["tests*", "front*", "htmlcov*", "data*", "output*", "venv*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+# 不要把仓库里的历史遗留目录当测试目录收集（tests/_tmp 可能属于别的账户而不可读）
+norecursedirs = ["_tmp", ".*", "build", "dist", "venv", "htmlcov", "node_modules"]
 addopts = "-p no:cacheprovider --tb=short -p no:capture"
 
 [tool.ruff.lint]
 # 忽略一些过于严格的规则，避免CI因历史代码问题失败
 ignore = [
     "BLE001",  # Do not catch blind exception: `Exception`
-    "B017",    # Do not assert blind exception: `Exception`
+    "B017",  # Do not assert blind exception: `Exception`
     "DTZ005",  # datetime.datetime.now() without tz
     "TRY002",  # Create your own exception
     "SIM117",  # Use a single `with` statement with multiple contexts
     "RUF059",  # Unpacked variable is never used
-    "F401",    # Imported but unused (except for availability checks)
-    "S110",    # try-except-pass
-    "S112",    # try-except-continue
-    "UP035",   # Deprecated typing modules
-    "B035",    # Dictionary comprehension uses static key
-    "F811",    # Redefinition of unused name
+    "F401",  # Imported but unused (except for availability checks)
+    "S110",  # try-except-pass
+    "S112",  # try-except-continue
+    "UP035",  # Deprecated typing modules
+    "B035",  # Dictionary comprehension uses static key
+    "F811",  # Redefinition of unused name
     "RUF100",  # Unused noqa directive
-    "B008",    # Do not perform function call in argument defaults
+    "B008",  # Do not perform function call in argument defaults
 ]
 
 [tool.coverage.run]

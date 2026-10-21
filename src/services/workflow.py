@@ -6,18 +6,43 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import contextmanager
+
+try:  # LangGraph >= 1.2：节点里抛出的 CancelledError 会被包成 NodeCancelledError
+    from langgraph.errors import NodeCancelledError
+except ImportError:  # 1.0.x / 1.1.x 没有这个异常，原生 CancelledError 会直接冒泡
+
+    class NodeCancelledError(Exception):  # noqa: N818
+        """旧版 LangGraph 的占位异常：永远不会被抛出，只为让 except 子句可用。"""
+
 
 from ..config import AppConfig
 from ..graph import build_graph
 from ..llm import create_default_llm
-from ..persistence import SessionStore, WorkflowCancellation
+from ..persistence import SessionStore, WorkflowCancellation, cancellation_scope
 from ..retrieval import create_knowledge_base_client
 from ..state import ResearchState
 
 logger = logging.getLogger("research.services.workflow")
+
+
+@contextmanager
+def _translate_node_cancellation():
+    """把 LangGraph 的 ``NodeCancelledError`` 统一成 ``asyncio.CancelledError``。
+
+    LangGraph 会把节点里抛出的 CancelledError 包成 ``NodeCancelledError``，
+    而它继承自 Exception —— 服务层/路由层的 ``except Exception`` 会把它当成
+    普通错误上报，前端就看不到"已取消"。在服务边界翻译回来，保证取消对外
+    只有一个语义。
+    """
+    try:
+        yield
+    except NodeCancelledError as exc:
+        raise asyncio.CancelledError(str(exc)) from exc
 
 
 class WorkflowService:
@@ -72,9 +97,13 @@ class WorkflowService:
         user_id: str,
         thread_id: str,
         tenant_id: str,
-        cancellation: WorkflowCancellation | None = None,
     ) -> ResearchState:
-        """构建初始状态。"""
+        """构建初始状态。
+
+        注意：取消信号**不**放进 state。它含 asyncio.Event、不可序列化，
+        塞进 state 会污染 checkpointer 快照；改为运行时用
+        ``cancellation_scope`` 绑定到上下文（见 graph.py 的取消边界）。
+        """
         return {
             "query": query,
             "user_id": user_id,
@@ -110,8 +139,6 @@ class WorkflowService:
             "code": "",
             "iteration": 0,
             "max_iterations": self._config.max_iterations,
-            # 【借鉴 Paper-Agent】将 cancellation 存入 state，节点可直接访问
-            "cancellation": cancellation,
         }
 
     async def run(
@@ -124,10 +151,11 @@ class WorkflowService:
     ) -> str:
         """执行调研任务，返回最终报告。"""
         self._ensure_initialized()
-        state = self._build_state(query, user_id, thread_id, tenant_id, cancellation)
+        state = self._build_state(query, user_id, thread_id, tenant_id)
         config = {"configurable": {"thread_id": thread_id}}
 
-        result = await self._graph.ainvoke(state, config)
+        with _translate_node_cancellation(), cancellation_scope(cancellation):
+            result = await self._graph.ainvoke(state, config)
         return result.get("final", "")
 
     async def resume(
@@ -150,24 +178,45 @@ class WorkflowService:
         # 使用相同的 thread_id，LangGraph checkpointer 会自动恢复中间状态
         config = {"configurable": {"thread_id": thread_id}}
 
-        # 合并快照中的业务数据（保留 cancellation 等运行时字段）
+        # 合并快照中的业务数据
         restored_state = dict(checkpoint_state)
-        if cancellation is not None:
-            restored_state["cancellation"] = cancellation
 
-        try:
-            # 尝试从 checkpointer 恢复；如果 checkpoint 不存在则从头开始
-            config = {"configurable": {"thread_id": thread_id}}
-            result = await self._graph.ainvoke(restored_state, config=config)
-        except Exception:
-            # Checkpoint 可能不在 checkpointer 中（进程重启后），降级为从头执行
-            logger.warning(
-                "Checkpoint 恢复失败，降级为从头执行 | thread_id=%s", thread_id
-            )
-            config = {"configurable": {"thread_id": thread_id}}
-            result = await self._graph.ainvoke(restored_state, config=config)
+        with _translate_node_cancellation():
+            try:
+                # 尝试从 checkpointer 恢复；如果 checkpoint 不存在则从头开始
+                config = {"configurable": {"thread_id": thread_id}}
+                with cancellation_scope(cancellation):
+                    result = await self._graph.ainvoke(restored_state, config=config)
+            except Exception:
+                # Checkpoint 可能不在 checkpointer 中（进程重启后），降级为从头执行
+                logger.warning(
+                    "Checkpoint 恢复失败，降级为从头执行 | thread_id=%s", thread_id
+                )
+                config = {"configurable": {"thread_id": thread_id}}
+                with cancellation_scope(cancellation):
+                    result = await self._graph.ainvoke(restored_state, config=config)
 
         return result.get("final", "")
+
+    async def _iterate_events(
+        self,
+        state: ResearchState,
+        config: dict,
+        cancellation: WorkflowCancellation | None,
+    ) -> AsyncIterator[dict]:
+        """在取消信号的上下文中迭代图事件。
+
+        ContextVar 只在图执行期间绑定：asyncio 每个任务持有独立的 context
+        副本，并发请求互不串扰；``with`` 退出时自动恢复，不会泄漏给后续任务。
+        """
+        with _translate_node_cancellation(), cancellation_scope(cancellation):
+            async for event in self._graph.astream_events(state, config, version="v2"):
+                yield event
+            # LangGraph 1.0.x 的 astream_events 会把节点里抛出的 CancelledError
+            # 静默吞掉（流直接枯竭、不抛异常）；1.2+ 才会包成 NodeCancelledError
+            # 冒泡。这里在流正常结束后按取消信号补一次判断，两个版本语义一致。
+            if cancellation is not None and cancellation.is_requested():
+                raise asyncio.CancelledError()
 
     async def stream_events(
         self,
@@ -186,7 +235,7 @@ class WorkflowService:
         - 最终结果推送
         """
         self._ensure_initialized()
-        state = self._build_state(query, user_id, thread_id, tenant_id, cancellation)
+        state = self._build_state(query, user_id, thread_id, tenant_id)
         config = {"configurable": {"thread_id": thread_id}}
 
         emit({"type": "status", "message": "任务已接收，正在初始化工作流"})
@@ -194,7 +243,7 @@ class WorkflowService:
         # 使用 stream 模式逐个获取节点输出，同时收集最终结果
         final = ""
         intent = "multiagent"
-        async for event in self._graph.astream_events(state, config, version="v2"):
+        async for event in self._iterate_events(state, config, cancellation):
             kind = event.get("event")
             if kind == "on_chain_start" and "name" in event:
                 node_name = event["name"]
@@ -224,7 +273,14 @@ class WorkflowService:
                     if "intent" in output:
                         intent = output.get("intent", "multiagent")
             elif kind == "on_chat_model_stream":
-                content = event.get("data", {}).get("chunk", {}).get("content", "")
+                # data.chunk 在真实运行时是 AIMessageChunk 对象（有 .content 属性、
+                # 没有 .get）；单测里 mock 成 dict。两种都要兼容，否则流式一进来就抛
+                # "'AIMessageChunk' object has no attribute 'get'"，整条 SSE 中断。
+                chunk = (event.get("data") or {}).get("chunk")
+                if isinstance(chunk, dict):
+                    content = chunk.get("content", "")
+                else:
+                    content = getattr(chunk, "content", "")
                 if content:
                     emit(
                         {
@@ -238,7 +294,8 @@ class WorkflowService:
 
         # 如果流中没有拿到 final，兜底调用一次 ainvoke
         if not final:
-            result = await self._graph.ainvoke(state, config)
+            with _translate_node_cancellation(), cancellation_scope(cancellation):
+                result = await self._graph.ainvoke(state, config)
             final = result.get("final", "")
             intent = result.get("intent", "multiagent")
 

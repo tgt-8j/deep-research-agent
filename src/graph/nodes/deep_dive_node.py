@@ -8,10 +8,10 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from app.metrics import track_node
-
+from ...metrics import track_node
 from ...prompt.loader import load_prompt
 from ...prompt.models import AuditFlag, EvidencePool, EvidencePoolItem
+from ...retrieval.web_search import _is_official_domain
 from ...state import ResearchState
 
 logger = logging.getLogger("research.nodes.deep_dive")
@@ -25,7 +25,8 @@ def _score_evidence(record: dict) -> tuple[float, str]:
     domain = str(record.get("domain", "")).lower()
     if not domain:
         return 0.45, "来源信息不完整"
-    if any(word in domain for word in [".gov.cn", ".gov", ".edu", ".edu.cn"]):
+    # 用检索层同一套后缀判定，避免这里再维护一份子串匹配逻辑
+    if _is_official_domain(domain):
         return 0.88, "官方或权威机构域名"
     if any(
         word in domain

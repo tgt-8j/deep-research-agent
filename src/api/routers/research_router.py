@@ -9,11 +9,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
-import threading
+from contextlib import suppress
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.responses import StreamingResponse
 
 from src.api.app import AppDependencies
@@ -73,10 +75,15 @@ def _resolve_tenant(request: Request, payload: ResearchRequest) -> str:
     return payload.tenant_id
 
 
-def _emit(event: dict) -> dict:
-    """给事件添加时间戳，供 SSE 使用。"""
+def _emit(event: dict) -> str:
+    """给事件补时间戳，并序列化成 SSE 的 data 段。
+
+    注意：这里必须返回 JSON 字符串。改造前直接把 dict 插值进 f-string，
+    发出去的是 Python repr（单引号、True/None），前端 ``JSON.parse`` 会直接
+    抛错、一条事件都收不到（App.vue 里就是按 JSON 解析的）。
+    """
     event["timestamp"] = datetime.now().isoformat()
-    return event
+    return json.dumps(event, ensure_ascii=False, default=str)
 
 
 # =====================================================================
@@ -143,6 +150,10 @@ async def stream_research(
     # 创建独立的取消信号（每个请求一个）
     cancellation = WorkflowCancellation()
 
+    # 注册到应用级依赖容器：取消接口按 session_key 找到这个信号
+    app_deps = get_app_deps(request)
+    app_deps.active_runs[thread_id] = cancellation
+
     # 持久化会话
     session_store.create_session(
         session_key=thread_id,
@@ -152,57 +163,97 @@ async def stream_research(
     )
 
     async def event_stream():
-        """SSE 事件流。"""
-        # 1. 发送开始事件
-        yield f"data: {_emit({'type': 'status', 'message': '任务已接收，正在初始化工作流'})}\n\n"
+        """SSE 事件流。
 
-        # 2. 在后台线程执行工作流，通过队列转发事件
-        import asyncio
+        改造点（原实现会在后台线程里调 ``asyncio.get_event_loop()``，
+        在 Python 3.10+ 的无 loop 线程上直接抛 RuntimeError，导致 /stream
+        永远只有一条 status 事件、30 秒后报"SSE 流超时"）：
 
-        queue: asyncio.Queue = asyncio.Queue()
+        - 不再起线程：工作流直接以 ``asyncio.create_task`` 跑在事件循环里
+        - ``emit`` 用 ``call_soon_threadsafe`` 投递，跨线程调用也安全
+        - 队列空闲时发 SSE 注释行做心跳，而不是直接判超时
+        - 客户端断开时取消任务，不留孤儿协程
+        """
+        queue: asyncio.Queue[dict] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
 
         def emit(event: dict) -> None:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(queue.put(event), loop)
-            else:
-                queue.put_nowait(event)
+            """把事件投递到队列（可从任意线程调用）。"""
+            loop.call_soon_threadsafe(queue.put_nowait, event)
 
-        def worker():
+        async def runner() -> None:
             try:
-                asyncio.get_event_loop().run_until_complete(
-                    service.stream_events(
-                        query=payload.query,
-                        user_id=payload.user_id,
-                        thread_id=thread_id,
-                        tenant_id=tenant_id,
-                        emit=emit,
-                        cancellation=cancellation,
-                    )
+                await service.stream_events(
+                    query=payload.query,
+                    user_id=payload.user_id,
+                    thread_id=thread_id,
+                    tenant_id=tenant_id,
+                    emit=emit,
+                    cancellation=cancellation,
                 )
-            except Exception as exc:
+            except asyncio.CancelledError:
+                # 收到停止请求（或客户端断开）：告诉前端这是取消，不是报错
+                emit({"type": "cancelled", "message": "任务已取消"})
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("[stream] 工作流异常")
                 emit({"type": "error", "message": str(exc)})
             finally:
                 emit({"type": "__done__"})
 
-        thread = threading.Thread(target=worker, daemon=True)
-        thread.start()
+        task = asyncio.create_task(runner())
 
-        # 3. 持续消费队列，转发 SSE 事件
-        while True:
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=30.0)
-            except asyncio.TimeoutError:
-                emit({"type": "error", "message": "SSE 流超时"})
-                break
-            if event.get("type") == "__done__":
-                break
-            yield f"data: {_emit(event)}\n\n"
+        # 1. 发送开始事件
+        accepted = _emit({"type": "status", "message": "任务已接收，正在初始化工作流"})
+        yield f"data: {accepted}\n\n"
 
-        # 4. 更新会话状态（在流结束后）
-        session_store.update_session_status(thread_id, "completed")
+        # 2. 持续消费队列，转发 SSE 事件
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    # 心跳：避免反向代理把空闲连接掐断
+                    yield ": keep-alive\n\n"
+                    continue
+                if event.get("type") == "__done__":
+                    break
+                yield f"data: {_emit(event)}\n\n"
+        finally:
+            # 3. 客户端断开或流结束：先请求协作式取消，再取消任务兜底
+            if not task.done():
+                cancellation.request()
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+            app_deps.active_runs.pop(thread_id, None)
+            # 4. 更新会话状态
+            session_store.update_session_status(thread_id, "completed")
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/sessions/{session_key}/cancel")
+async def cancel_session(
+    session_key: str,
+    request: Request,
+) -> dict:
+    """请求取消正在运行的调研任务。
+
+    协作式取消：信号在**下一个节点边界**生效 —— 当前节点跑完后丢弃它的
+    结果再中止，不会把半截状态写进 checkpoint（见 src/graph/graph.py 的取消边界）。
+    """
+    deps = get_app_deps(request)
+    cancellation = deps.active_runs.get(session_key)
+    if cancellation is None:
+        raise HTTPException(status_code=404, detail="该会话没有正在运行的任务")
+    cancellation.request()
+    logger.info("[cancel] 收到取消请求 | session=%s", session_key)
+    return {"session_key": session_key, "status": "cancel_requested"}
 
 
 @router.get("/sessions/{session_key}")

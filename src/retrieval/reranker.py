@@ -1,146 +1,196 @@
-"""Rerank 重排序模块：对检索结果进行粗筛+精排两级优化。
+"""Rerank 重排序：词法粗筛 + 语义精排（两级用的是**不同**信号）。
 
-设计思路：
-- 粗筛（Embedding 向量相似度）：保证召回率，从大量候选中快速筛选 Top-N
-- 精排（Cross-Encoder 重排序）：保证准确率，对精选候选进行精细打分
-- 两级策略平衡速度和质量，适合生产环境
+为什么要改：旧实现里粗筛和精排都是对 ``title + snippet`` 算 embedding 余弦，
+等于同一个信号算了两遍 —— 精排只会得到和粗筛完全相同的顺序，还多付一次
+embedding 费用。现在两级的信号真正不同：
 
-使用方式：
-    from src.retrieval.reranker import Reranker, rerank_evidence
-    reranker = Reranker()
-    results = reranker.rerank(query, evidence_items, coarse_k=30, fine_k=10)
+    第一级（粗筛，0 次 API 调用）：BM25 词法相关性，负责"高召回 + 砍数量"
+        100 条候选 → Top-30。只做排序和截断，词法不命中的候选也不会被丢弃
+        （按原顺序补在后面），避免因为分词问题把好证据提前筛掉。
+
+    第二级（精排，语义相关性）：Top-30 → Top-10
+        a) cross-encoder（BGE-Reranker 等，精度最高，需装 sentence-transformers
+           并下载模型）
+        b) embedding 余弦（默认，无额外依赖）
+
+后端选择：默认走 embedding；设置 ``RERANKER_BACKEND=cross_encoder`` 且安装了
+``sentence-transformers`` 时启用 cross-encoder（懒加载，加载失败自动降级）。
+模型可用 ``RERANKER_MODEL`` 覆盖，默认 ``BAAI/bge-reranker-base``。
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 import numpy as np
 
+from .hybrid_search import bm25_search
+
 logger = logging.getLogger("research.retrieval.reranker")
+
+_DEFAULT_CE_MODEL = "BAAI/bge-reranker-base"
+# DashScope text-embedding-v1 单次最多 25 条，留一点余量
+_EMBED_BATCH_SIZE = 16
+_CE_BACKEND_ALIASES = {"cross_encoder", "cross-encoder", "ce", "bge", "reranker"}
+
+
+def _item_text(item: dict) -> str:
+    return f"{item.get('title', '')} {item.get('snippet', '')}".strip()
+
+
+def _strip_internal(item: dict) -> dict:
+    return {k: v for k, v in item.items() if not k.startswith("_rerank_")}
 
 
 class Reranker:
-    """Rerank 重排序器。
+    """两级重排序器：BM25 粗筛 → 语义精排。"""
 
-    属性：
-        use_embedding_rerank: 是否使用 Embedding 重排序（备选方案）
-        embedding_model: Embedding 模型实例
-    """
-
-    def __init__(self, use_embedding_rerank: bool = True):
-        """初始化 Reranker。
-
+    def __init__(
+        self,
+        use_embedding_rerank: bool = True,
+        use_cross_encoder: bool | None = None,
+    ):
+        """
         Args:
-            use_embedding_rerank: 是否启用 Embedding 重排序（备用方案）
+            use_embedding_rerank: 是否允许用 Embedding 余弦做精排（关掉即只做粗筛）。
+            use_cross_encoder: 是否启用 cross-encoder 精排。
+                ``None``（默认）表示读环境变量 ``RERANKER_BACKEND`` 决定。
         """
         self.use_embedding_rerank = use_embedding_rerank
         self._embedding_model: Any | None = None
+        self._cross_encoder: Any | None = None
+        self._cross_encoder_checked = False
+
+        if use_cross_encoder is None:
+            backend = os.getenv("RERANKER_BACKEND", "").strip().lower()
+            use_cross_encoder = backend in _CE_BACKEND_ALIASES
+        self.use_cross_encoder = bool(use_cross_encoder)
+
+    # ------------------------------------------------------------------
+    # 后端懒加载
+    # ------------------------------------------------------------------
 
     def _get_embedding_model(self):
-        """懒加载 Embedding 模型。"""
-        if self._embedding_model is None:
-            try:
-                import os
+        """懒加载 Embedding 模型（不可用时自动关闭精排）。"""
+        if self._embedding_model is not None:
+            return self._embedding_model
+        try:
+            from langchain_community.embeddings import DashScopeEmbeddings
 
-                from langchain_community.embeddings import DashScopeEmbeddings
-
-                api_key = os.environ.get("DASHSCOPE_API_KEY", "")
-                if api_key:
-                    self._embedding_model = DashScopeEmbeddings(
-                        model="text-embedding-v1",
-                        dashscope_api_key=api_key,
-                    )
-                    logger.info("[reranker] Embedding 模型加载成功")
-                else:
-                    logger.warning(
-                        "[reranker] DASHSCOPE_API_KEY 未设置，禁用 Embedding 重排序"
-                    )
-                    self.use_embedding_rerank = False
-            except ImportError:
+            api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+            if not api_key:
                 logger.warning(
-                    "[reranker] langchain_community.embeddings 不可用，禁用 Embedding 重排序"
+                    "[reranker] DASHSCOPE_API_KEY 未设置，禁用 Embedding 精排"
                 )
                 self.use_embedding_rerank = False
+                return None
+            self._embedding_model = DashScopeEmbeddings(
+                model="text-embedding-v1",
+                dashscope_api_key=api_key,
+            )
+            logger.info("[reranker] Embedding 模型加载成功")
+        except ImportError:
+            logger.warning("[reranker] langchain_community 不可用，禁用 Embedding 精排")
+            self.use_embedding_rerank = False
         return self._embedding_model
 
+    def _get_cross_encoder(self):
+        """懒加载 cross-encoder；任何失败都返回 None（由上层降级）。"""
+        if self._cross_encoder_checked:
+            return self._cross_encoder
+        self._cross_encoder_checked = True
+        try:
+            from sentence_transformers import CrossEncoder
+        except ImportError:
+            logger.info(
+                "[reranker] 未安装 sentence-transformers，精排回退到 Embedding 余弦"
+            )
+            return None
+        model_name = os.getenv("RERANKER_MODEL", _DEFAULT_CE_MODEL)
+        try:
+            self._cross_encoder = CrossEncoder(model_name)
+            logger.info("[reranker] cross-encoder 加载完成 | model=%s", model_name)
+        except Exception as exc:  # noqa: BLE001 - 模型下载/加载失败都要能降级
+            logger.warning("[reranker] cross-encoder 加载失败，回退 Embedding: %s", exc)
+            self._cross_encoder = None
+        return self._cross_encoder
+
+    # ------------------------------------------------------------------
+    # 向量工具
+    # ------------------------------------------------------------------
+
     def _embed_text(self, texts: list[str]) -> list[list[float]]:
-        """批量生成文本向量。
-
-        Args:
-            texts: 文本列表
-
-        Returns:
-            向量列表
-        """
+        """批量生成文本向量（按批切分，避免单次请求超限）。"""
         model = self._get_embedding_model()
         if model is None:
             raise RuntimeError("Embedding 模型不可用")
-        return model.embed_documents(texts)
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), _EMBED_BATCH_SIZE):
+            batch = texts[start : start + _EMBED_BATCH_SIZE]
+            vectors.extend(model.embed_documents(batch))
+        return vectors
 
-    def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
-        """计算余弦相似度。
-
-        Args:
-            vec1: 向量1
-            vec2: 向量2
-
-        Returns:
-            余弦相似度 [0, 1]
-        """
-        a = np.array(vec1, dtype=np.float64)
-        b = np.array(vec2, dtype=np.float64)
+    @staticmethod
+    def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
+        """余弦相似度，返回 [-1, 1]。"""
+        a = np.asarray(vec1, dtype=np.float64)
+        b = np.asarray(vec2, dtype=np.float64)
         norm_a = np.linalg.norm(a)
         norm_b = np.linalg.norm(b)
         if norm_a == 0 or norm_b == 0:
             return 0.0
         return float(np.dot(a, b) / (norm_a * norm_b))
 
+    # ------------------------------------------------------------------
+    # 第一级：词法粗筛（BM25，无 API 调用）
+    # ------------------------------------------------------------------
+
     def coarse_filter(
         self,
         query: str,
         evidence_items: list[dict],
         k: int = 30,
-    ) -> list[dict]:
-        """粗筛：用 Embedding 向量相似度从大量候选中筛选 Top-K。
+    ) -> tuple[list[dict], None]:
+        """粗筛：按 BM25 词法相关性排序并截断到 Top-K。
 
-        Args:
-            query: 查询词
-            evidence_items: 证据列表，每项包含 source_id, title, snippet 等
-            k: 筛选数量
+        只改变顺序，不因为词法不命中而丢弃候选：BM25 未命中的条目按原顺序
+        补在后面，保证召回不退化（真正的相关性判断交给精排）。
 
         Returns:
-            筛选后的证据列表，按相似度降序
+            ``(排序后的前 K 条, None)``。第二个元素为历史签名的占位，
+            现在粗筛不产生 query 向量。
         """
         if not evidence_items:
             return [], None
 
-        # 准备文本用于 embedding
-        texts = [
-            f"{item.get('title', '')} {item.get('snippet', '')}"
-            for item in evidence_items
+        docs = [
+            {"_row": idx, "content": _item_text(item)}
+            for idx, item in enumerate(evidence_items)
         ]
-
-        # 生成查询和文档向量
         try:
-            query_vec = self._embed_text([query])[0]
-            doc_vectors = self._embed_text(texts)
-        except Exception as e:
-            logger.warning("[coarse_filter] Embedding 失败，跳过粗筛: %s", e)
-            return evidence_items[:k], None
+            ranked = bm25_search(query, docs, top_k=len(docs))
+        except Exception as exc:  # noqa: BLE001 - 词法不可用时退回原顺序
+            logger.warning("[coarse_filter] BM25 计算失败，保持原顺序: %s", exc)
+            ranked = []
 
-        # 计算相似度并排序
-        scored_items = []
-        for i, item in enumerate(evidence_items):
-            sim = self._cosine_similarity(query_vec, doc_vectors[i])
-            item_copy = dict(item)
-            item_copy["_rerank_coarse_score"] = sim
-            scored_items.append(item_copy)
+        order = [doc["_row"] for doc in ranked]
+        seen = set(order)
+        order.extend(idx for idx in range(len(evidence_items)) if idx not in seen)
 
-        # 按相似度降序排序，取 Top-K
-        scored_items.sort(key=lambda x: x["_rerank_coarse_score"], reverse=True)
-        return scored_items[:k], query_vec
+        selected = [dict(evidence_items[idx]) for idx in order[:k]]
+        logger.info(
+            "[coarse_filter] BM25 命中 %d/%d，取 Top-%d",
+            len(ranked),
+            len(evidence_items),
+            len(selected),
+        )
+        return selected, None
+
+    # ------------------------------------------------------------------
+    # 第二级：语义精排（cross-encoder / embedding）
+    # ------------------------------------------------------------------
 
     def fine_rank(
         self,
@@ -149,58 +199,58 @@ class Reranker:
         k: int = 10,
         query_vec: list[float] | None = None,
     ) -> list[dict]:
-        """精排：用 Embedding 重排序对候选进行精细打分。
+        """精排：用语义相关性对粗筛结果排序并截断到 Top-K。"""
+        ranked, _backend = self._fine_rank(query, evidence_items, k, query_vec)
+        return ranked
 
-        注意：由于没有安装 cross-encoder，这里使用 Embedding 余弦相似度作为精排依据。
-        实际生产环境可替换为 BGE-Reranker 等 cross-encoder 模型。
-
-        Args:
-            query: 查询词
-            evidence_items: 已粗筛的证据列表
-            k: 返回数量
-
-        Returns:
-            精排后的证据列表，按相关性分数降序
-        """
+    def _fine_rank(
+        self,
+        query: str,
+        evidence_items: list[dict],
+        k: int,
+        query_vec: list[float] | None = None,
+    ) -> tuple[list[dict], str]:
+        """返回 ``(结果, 使用的后端)``，后端为 cross_encoder / embedding / none。"""
         if not evidence_items:
-            return []
+            return [], "none"
 
-        # 使用 Embedding 余弦相似度作为精排分数
-        texts = [
-            f"{item.get('title', '')} {item.get('snippet', '')}"
-            for item in evidence_items
-        ]
-
-        if query_vec is None:
+        cross_encoder = self._get_cross_encoder() if self.use_cross_encoder else None
+        if cross_encoder is not None:
             try:
-                query_vec = self._embed_text([query])[0]
-            except Exception as e:
-                logger.warning("[fine_rank] Embedding 失败，使用原始顺序: %s", e)
-                return evidence_items[:k]
+                pairs = [(query, _item_text(item)) for item in evidence_items]
+                scores = cross_encoder.predict(pairs)
+                scored = [
+                    (_strip_internal(item), float(score))
+                    for item, score in zip(evidence_items, scores, strict=False)
+                ]
+                scored.sort(key=lambda pair: pair[1], reverse=True)
+                logger.info("[fine_rank] cross-encoder 精排完成 | k=%d", k)
+                return [item for item, _ in scored[:k]], "cross_encoder"
+            except Exception as exc:  # noqa: BLE001 - 推理失败即降级
+                logger.warning("[fine_rank] cross-encoder 推理失败，降级: %s", exc)
+
+        if not self.use_embedding_rerank:
+            return [_strip_internal(item) for item in evidence_items[:k]], "none"
+
+        texts = [_item_text(item) for item in evidence_items]
         try:
+            if query_vec is None:
+                query_vec = self._embed_text([query])[0]
             doc_vectors = self._embed_text(texts)
-        except Exception as e:
-            logger.warning("[fine_rank] Embedding 失败，使用原始顺序: %s", e)
-            return evidence_items[:k]
+        except Exception as exc:  # noqa: BLE001 - Embedding 不可用就保持顺序
+            logger.warning("[fine_rank] Embedding 失败，保持粗筛顺序: %s", exc)
+            return [_strip_internal(item) for item in evidence_items[:k]], "none"
 
-        # 计算精排分数
-        scored_items = []
-        for i, item in enumerate(evidence_items):
-            sim = self._cosine_similarity(query_vec, doc_vectors[i])
-            item_copy = dict(item)
-            item_copy["_rerank_fine_score"] = sim
-            scored_items.append(item_copy)
+        scored = []
+        for item, vector in zip(evidence_items, doc_vectors, strict=False):
+            similarity = self._cosine_similarity(query_vec, vector)
+            scored.append((_strip_internal(item), similarity))
+        scored.sort(key=lambda pair: pair[1], reverse=True)
+        return [item for item, _ in scored[:k]], "embedding"
 
-        # 按精排分数降序排序，取 Top-K
-        scored_items.sort(key=lambda x: x["_rerank_fine_score"], reverse=True)
-
-        # 清理内部字段
-        result = []
-        for item in scored_items[:k]:
-            cleaned = {k: v for k, v in item.items() if not k.startswith("_rerank_")}
-            result.append(cleaned)
-
-        return result
+    # ------------------------------------------------------------------
+    # 组合：粗筛 → 精排
+    # ------------------------------------------------------------------
 
     def rerank(
         self,
@@ -209,67 +259,57 @@ class Reranker:
         coarse_k: int = 30,
         fine_k: int = 10,
     ) -> tuple[list[dict], dict]:
-        """两级重排序：粗筛 + 精排。
-
-        Args:
-            query: 查询词
-            evidence_items: 所有检索结果
-            coarse_k: 粗筛数量
-            fine_k: 精排数量
+        """两级重排序：BM25 粗筛 Top-``coarse_k`` → 语义精排 Top-``fine_k``。
 
         Returns:
-            (重排序后的证据列表, 重排序统计信息)
+            ``(结果列表, stats)``。stats 里的 ``method`` 取值：
+            ``none`` / ``coarse_only`` / ``bm25_only`` /
+            ``bm25+embedding`` / ``bm25+cross_encoder``。
         """
-        if not evidence_items:
-            return [], {"coarse_filtered": 0, "fine_ranked": 0, "method": "none"}
-
         total_before = len(evidence_items)
-        stats = {"coarse_filtered": total_before, "fine_ranked": 0, "method": ""}
+        if not evidence_items:
+            return [], {
+                "method": "none",
+                "total_before": 0,
+                "coarse_stage": "none",
+                "coarse_kept": 0,
+                "fine_stage": "none",
+                "total_after": 0,
+            }
 
-        # 检查是否有可用的重排序方法
-        if not self.use_embedding_rerank:
-            logger.info("[rerank] Embedding 重排序不可用，返回原始顺序")
-            stats["method"] = "none"
-            stats["total_before"] = total_before
-            stats["total_after"] = min(len(evidence_items), fine_k)
-            return evidence_items[:fine_k], stats
-
-        # 第一步：粗筛
-        logger.info("[rerank] 开始粗筛，候选数=%d, 目标数=%d", total_before, coarse_k)
-        coarse_results, query_vec = self.coarse_filter(
-            query, evidence_items, k=coarse_k
-        )
-        stats["coarse_filtered"] = len(coarse_results)
+        coarse_results, _ = self.coarse_filter(query, evidence_items, k=coarse_k)
+        stats = {
+            "method": "",
+            "total_before": total_before,
+            "coarse_stage": "bm25",
+            "coarse_kept": len(coarse_results),
+            "fine_stage": "none",
+            "total_after": 0,
+        }
 
         if len(coarse_results) <= fine_k:
-            # 粗筛结果已少于精排数量，直接返回
+            # 粗筛后已经不超过精排目标，省掉一次精排（也就省掉一次 API 调用）
+            results = [_strip_internal(item) for item in coarse_results]
+            stats["method"] = "coarse_only"
             logger.info(
                 "[rerank] 粗筛结果 %d <= 精排目标 %d，跳过精排",
                 len(coarse_results),
                 fine_k,
             )
-            stats["method"] = "coarse_only"
-            stats["fine_ranked"] = len(coarse_results)
-            return coarse_results, stats
+        else:
+            results, backend = self._fine_rank(query, coarse_results, k=fine_k)
+            stats["fine_stage"] = backend
+            stats["method"] = "bm25_only" if backend == "none" else f"bm25+{backend}"
 
-        # 第二步：精排
+        stats["total_after"] = len(results)
         logger.info(
-            "[rerank] 开始精排，候选数=%d, 目标数=%d", len(coarse_results), fine_k
-        )
-        fine_results = self.fine_rank(
-            query, coarse_results, k=fine_k, query_vec=query_vec
-        )
-        stats["method"] = "coarse+fine"
-        stats["fine_ranked"] = len(fine_results)
-
-        logger.info(
-            "[rerank] 重排序完成：原始=%d -> 粗筛=%d -> 精排=%d",
+            "[rerank] %s | 原始=%d -> 粗筛=%d -> 精排=%d",
+            stats["method"],
             total_before,
-            stats["coarse_filtered"],
-            stats["fine_ranked"],
+            stats["coarse_kept"],
+            stats["total_after"],
         )
-
-        return fine_results, stats
+        return results, stats
 
 
 def rerank_evidence(
@@ -279,18 +319,7 @@ def rerank_evidence(
     fine_k: int = 10,
     reranker: Reranker | None = None,
 ) -> tuple[list[dict], dict]:
-    """便捷函数：对证据进行重排序。
-
-    Args:
-        query: 查询词
-        evidence_items: 证据列表
-        coarse_k: 粗筛数量
-        fine_k: 精排数量
-        reranker: Reranker 实例（可选，默认创建新实例）
-
-    Returns:
-        (重排序后的证据列表, 统计信息)
-    """
+    """便捷函数：对证据做两级重排序。"""
     if reranker is None:
         reranker = Reranker()
     return reranker.rerank(query, evidence_items, coarse_k=coarse_k, fine_k=fine_k)
